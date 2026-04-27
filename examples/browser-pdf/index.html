@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VecLite PDF Local RAG</title>
+    <link rel="stylesheet" href="/src/style.css">
+  </head>
+  <body>
+    <div id="app">
+      <h1>100% Local PDF RAG ⚡️</h1>
+      <p>Demonstrating `VecLite` coupled with Hugging Face's `Transformers.js` to parse and search documents entirely in your web browser. No server needed.</p>
+      
+      <div class="status-panel" id="status-panel">Loading Models & WebAssembly Core...</div>
+
+      <div class="card" id="upload-card">
+        <h2>1. Upload a PDF</h2>
+        <input type="file" id="file-input" accept="application/pdf" disabled/>
+        <div id="progress-container">
+          <div id="progress-bar"></div>
+        </div>
+        <p id="upload-status" class="subtle-text">Awaiting PDF Upload</p>
+      </div>
+
+      <div class="card" id="search-card" style="opacity: 0.4;">
+        <h2>2. Search the Document</h2>
+        <div class="search-box">
+          <input type="text" id="search-input" placeholder="What are you looking for?" disabled />
+          <button id="btn-search" type="button" disabled>Search</button>
+        </div>
+        
+        <div class="results" id="results-container">
+          <!-- Results populated here -->
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

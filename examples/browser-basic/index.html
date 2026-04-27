@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VecLite Browser Basic Example</title>
+    <link rel="stylesheet" href="/src/style.css">
+  </head>
+  <body>
+    <div id="app">
+      <h1>VecLite in the Browser ⚡️</h1>
+      <p>This is a minimal demonstration of VecLite's in-browser capabilities using WebAssembly.</p>
+
+      <div class="card">
+        <h2>1. Index Vectors</h2>
+        <p>Current Index Size: <strong id="index-size">0</strong></p>
+        <button id="btn-seed" type="button">Insert 1,000 Random Vectors</button>
+        <button id="btn-clear" type="button" class="danger">Clear Index</button>
+      </div>
+
+      <div class="card">
+        <h2>2. Search</h2>
+        <p>Find the 5 closest vectors to a random query based on Cosine Similarity.</p>
+        <button id="btn-search" type="button" disabled>Search Nearest Neighbors</button>
+        
+        <div class="results" id="results-container">
+          <!-- Search results will appear here -->
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
