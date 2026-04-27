@@ -9,6 +9,8 @@ export type {
   SearchResult,
   Metadata,
   MetadataValue,
+  FilterOperator,
+  FilterValue,
 } from './types.js'
 export {
   VecLiteDimensionError,

@@ -296,3 +296,176 @@ describe('persistence', () => {
     expect(db2.size).toBe(2)
   })
 })
+
+describe('filter operators (v0.2)', () => {
+  // Shared fixture: 4 entries with numeric year and string category
+  function makeFilterDb() {
+    const db = make()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0], metadata: { cat: 'science', year: 2019 } },
+      { id: 'b', vector: [1, 0, 0], metadata: { cat: 'science', year: 2021 } },
+      { id: 'c', vector: [1, 0, 0], metadata: { cat: 'tech', year: 2022 } },
+      { id: 'd', vector: [1, 0, 0], metadata: { cat: 'tech', year: 2023 } },
+    ])
+    return db
+  }
+
+  // ── $gte ──────────────────────────────────────────────────────────────────
+
+  it('$gte — returns entries with year >= 2021', () => {
+    const db = makeFilterDb()
+    const results = db.search({ vector: [1, 0, 0], topK: 10, filter: { year: { $gte: 2021 } } })
+    const ids = results.map((r) => r.id).sort()
+    expect(ids).toEqual(['b', 'c', 'd'])
+  })
+
+  it('$gte — no results when threshold exceeds all entries', () => {
+    const db = makeFilterDb()
+    const results = db.search({ vector: [1, 0, 0], topK: 10, filter: { year: { $gte: 2030 } } })
+    expect(results).toHaveLength(0)
+  })
+
+  // ── $lte ──────────────────────────────────────────────────────────────────
+
+  it('$lte — returns entries with year <= 2021', () => {
+    const db = makeFilterDb()
+    const results = db.search({ vector: [1, 0, 0], topK: 10, filter: { year: { $lte: 2021 } } })
+    const ids = results.map((r) => r.id).sort()
+    expect(ids).toEqual(['a', 'b'])
+  })
+
+  it('$lte — no results when threshold is below all entries', () => {
+    const db = makeFilterDb()
+    const results = db.search({ vector: [1, 0, 0], topK: 10, filter: { year: { $lte: 2000 } } })
+    expect(results).toHaveLength(0)
+  })
+
+  // ── $in ───────────────────────────────────────────────────────────────────
+
+  it('$in — matches entries whose category is in the array', () => {
+    const db = makeFilterDb()
+    const results = db.search({
+      vector: [1, 0, 0],
+      topK: 10,
+      filter: { cat: { $in: ['science'] } },
+    })
+    const ids = results.map((r) => r.id).sort()
+    expect(ids).toEqual(['a', 'b'])
+  })
+
+  it('$in — matches multiple values', () => {
+    const db = makeFilterDb()
+    const results = db.search({
+      vector: [1, 0, 0],
+      topK: 10,
+      filter: { cat: { $in: ['science', 'tech'] } },
+    })
+    expect(results).toHaveLength(4)
+  })
+
+  it('$in — empty array matches nothing', () => {
+    const db = makeFilterDb()
+    const results = db.search({
+      vector: [1, 0, 0],
+      topK: 10,
+      filter: { cat: { $in: [] } },
+    })
+    expect(results).toHaveLength(0)
+  })
+
+  // ── $ne ───────────────────────────────────────────────────────────────────
+
+  it('$ne — excludes entry with matching value', () => {
+    const db = makeFilterDb()
+    const results = db.search({
+      vector: [1, 0, 0],
+      topK: 10,
+      filter: { cat: { $ne: 'science' } },
+    })
+    const ids = results.map((r) => r.id).sort()
+    expect(ids).toEqual(['c', 'd'])
+  })
+
+  // ── Range ($gte + $lte combined) ─────────────────────────────────────────
+
+  it('combined $gte + $lte narrows range correctly', () => {
+    const db = makeFilterDb()
+    const results = db.search({
+      vector: [1, 0, 0],
+      topK: 10,
+      filter: { year: { $gte: 2021, $lte: 2022 } },
+    })
+    const ids = results.map((r) => r.id).sort()
+    expect(ids).toEqual(['b', 'c'])
+  })
+
+  // ── Mixed exact + operator ────────────────────────────────────────────────
+
+  it('mixed filter — exact cat + $gte year both must hold', () => {
+    const db = makeFilterDb()
+    const results = db.search({
+      vector: [1, 0, 0],
+      topK: 10,
+      filter: { cat: 'science', year: { $gte: 2021 } },
+    })
+    const ids = results.map((r) => r.id).sort()
+    expect(ids).toEqual(['b'])
+  })
+
+  it('mixed filter — result empty when exact fails', () => {
+    const db = makeFilterDb()
+    const results = db.search({
+      vector: [1, 0, 0],
+      topK: 10,
+      filter: { cat: 'physics', year: { $gte: 2021 } },
+    })
+    expect(results).toHaveLength(0)
+  })
+
+  // ── Backwards compatibility ───────────────────────────────────────────────
+
+  it('v0.1 exact-match filter still works unchanged', () => {
+    const db = makeFilterDb()
+    const results = db.search({
+      vector: [1, 0, 0],
+      topK: 10,
+      filter: { cat: 'tech' },
+    })
+    const ids = results.map((r) => r.id).sort()
+    expect(ids).toEqual(['c', 'd'])
+  })
+
+  // ── Validator rejects invalid operator input ──────────────────────────────
+
+  it('validator rejects unknown operator key', () => {
+    const db = make()
+    db.upsert([{ id: 'a', vector: [1, 0, 0], metadata: { year: 2024 } }])
+    expect(() =>
+      db.search({ vector: [1, 0, 0], topK: 1, filter: { year: { $exists: true } as any } }),
+    ).toThrow(VecLiteValidationError)
+  })
+
+  it('validator rejects $gte with non-number value', () => {
+    const db = make()
+    db.upsert([{ id: 'a', vector: [1, 0, 0], metadata: { year: 2024 } }])
+    expect(() =>
+      db.search({ vector: [1, 0, 0], topK: 1, filter: { year: { $gte: 'oops' as any } } }),
+    ).toThrow(VecLiteValidationError)
+  })
+
+  it('validator rejects $in with non-array value', () => {
+    const db = make()
+    db.upsert([{ id: 'a', vector: [1, 0, 0], metadata: { cat: 'science' } }])
+    expect(() =>
+      db.search({ vector: [1, 0, 0], topK: 1, filter: { cat: { $in: 'science' as any } } }),
+    ).toThrow(VecLiteValidationError)
+  })
+
+  it('validator rejects empty operator object', () => {
+    const db = make()
+    db.upsert([{ id: 'a', vector: [1, 0, 0], metadata: { year: 2024 } }])
+    expect(() =>
+      db.search({ vector: [1, 0, 0], topK: 1, filter: { year: {} as any } }),
+    ).toThrow(VecLiteValidationError)
+  })
+})

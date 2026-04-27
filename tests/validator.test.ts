@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sanitizeMetadata, validateVector } from '../src/validator.js'
+import { sanitizeMetadata, validateFilter, validateVector } from '../src/validator.js'
 import { VecLiteDimensionError, VecLiteValidationError } from '../src/types.js'
 
 describe('validateVector', () => {
@@ -80,5 +80,99 @@ describe('sanitizeMetadata', () => {
 
   it('throws VecLiteValidationError when metadata itself is an array', () => {
     expect(() => sanitizeMetadata([1, 2, 3])).toThrow(VecLiteValidationError)
+  })
+})
+
+describe('validateFilter', () => {
+  it('accepts empty filter without throwing', () => {
+    expect(() => validateFilter({})).not.toThrow()
+  })
+
+  it('accepts v0.1 exact-match primitives', () => {
+    expect(() =>
+      validateFilter({ cat: 'science', year: 2024, active: true }),
+    ).not.toThrow()
+  })
+
+  it('accepts valid $gte operator', () => {
+    expect(() => validateFilter({ year: { $gte: 2020 } })).not.toThrow()
+  })
+
+  it('accepts valid $lte operator', () => {
+    expect(() => validateFilter({ year: { $lte: 2024 } })).not.toThrow()
+  })
+
+  it('accepts valid $in operator with mixed types', () => {
+    expect(() =>
+      validateFilter({ cat: { $in: ['science', 'tech'] } }),
+    ).not.toThrow()
+  })
+
+  it('accepts valid $ne operator', () => {
+    expect(() => validateFilter({ status: { $ne: 'archived' } })).not.toThrow()
+  })
+
+  it('accepts combined operators on the same key', () => {
+    expect(() => validateFilter({ year: { $gte: 2020, $lte: 2024 } })).not.toThrow()
+  })
+
+  it('accepts mixed exact + operator keys', () => {
+    expect(() =>
+      validateFilter({ cat: 'science', year: { $gte: 2020 } }),
+    ).not.toThrow()
+  })
+
+  it('throws for unknown operator key', () => {
+    expect(() =>
+      validateFilter({ year: { $exists: true } as any }),
+    ).toThrow(VecLiteValidationError)
+  })
+
+  it('throws for $gte with string value', () => {
+    expect(() =>
+      validateFilter({ year: { $gte: 'oops' as any } }),
+    ).toThrow(VecLiteValidationError)
+  })
+
+  it('throws for $lte with non-number value', () => {
+    expect(() =>
+      validateFilter({ year: { $lte: true as any } }),
+    ).toThrow(VecLiteValidationError)
+  })
+
+  it('throws for $in with non-array value', () => {
+    expect(() =>
+      validateFilter({ cat: { $in: 'science' as any } }),
+    ).toThrow(VecLiteValidationError)
+  })
+
+  it('throws for $in array containing an object element', () => {
+    expect(() =>
+      validateFilter({ cat: { $in: [{}] as any } }),
+    ).toThrow(VecLiteValidationError)
+  })
+
+  it('throws for $ne with object value', () => {
+    expect(() =>
+      validateFilter({ cat: { $ne: {} as any } }),
+    ).toThrow(VecLiteValidationError)
+  })
+
+  it('throws for empty operator object', () => {
+    expect(() =>
+      validateFilter({ year: {} as any }),
+    ).toThrow(VecLiteValidationError)
+  })
+
+  it('throws for filter value that is a plain array', () => {
+    expect(() =>
+      validateFilter({ cat: [] as any }),
+    ).toThrow(VecLiteValidationError)
+  })
+
+  it('silently skips __proto__ key', () => {
+    expect(() =>
+      validateFilter({ __proto__: { $gte: 0 } } as any),
+    ).not.toThrow()
   })
 })
