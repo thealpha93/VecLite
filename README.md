@@ -204,10 +204,9 @@ The WASM binary is loaded on demand via `VecLite.init()` and cached by the brows
 
 ## Roadmap
 
-| Version | What's coming |
-|---------|--------------|
-| v0.1 | Flat index, cosine similarity, exact-match filters, IndexedDB + Memory adapters |
-| v0.2 | HNSW approximate nearest neighbour, L2 distance, filter operators (`$gte`, `$lte`, `$in`), Web Worker support |
+VecLite is actively maintained. Upcoming features for `v0.2` include **HNSW (Approximate Nearest Neighbor)** indexing, metadata filter operators (`$gte`, `$in`), and Web Worker support.
+
+Check out the full [ROADMAP.md](./ROADMAP.md) to see what's planned and how you can contribute!
 
 ## License
 
