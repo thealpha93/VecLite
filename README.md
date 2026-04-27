@@ -183,15 +183,15 @@ npm run bench       # VecLite vs pure-JS benchmark
 ## Benchmarks
 
 Run `npm run bench` to compare VecLite against a pure-JS Float32Array implementation.
-Measured on Apple M-series, dim=128, topK=10:
+The following benchmarks were measured using 1536-dimensional vectors (standard for most OpenAI models) on an Apple M-series chip with `topK=10`:
 
-```
- 1,000 vectors   VecLite 0.087ms  pure JS 0.37ms   → 4.2× faster
- 5,000 vectors   VecLite 0.42ms   pure JS 2.06ms   → 4.9× faster
-10,000 vectors   VecLite 0.82ms   pure JS 4.34ms   → 5.3× faster
-```
+| Database Size | VecLite Mean Time | JS Mean Time | Speedup | (VecLite / JS Samples) |
+| ------------- | ----------------- | ------------ | ------- | ---------------------- |
+| 10,000 vectors| 12.17 ms | 33.79 ms | **2.77x faster** | 2,464 / 888 |
+| 50,000 vectors| 61.84 ms | 179.55 ms| **2.90x faster** | 486 / 168   |
+| 100,000 vectors| 123.07 ms| 360.39 ms| **2.93x faster** | 244 / 84    |
 
-The gap widens with vector count as WASM's memory layout and SIMD-friendly f32 arithmetic pull further ahead. For OpenAI `text-embedding-3-large` (3072 dims) the advantage is larger still — set `DIM=3072` to reproduce locally.
+The performance gap scales as dataset sizes increase thanks to WASM's highly optimized, contiguous `f32` memory layout circumventing V8 JavaScript runtime garbage collection pauses.
 
 ## Bundle size
 
