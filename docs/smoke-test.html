@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>VecLite smoke test</title>
+  <style>
+    body { font-family: monospace; padding: 2rem; max-width: 640px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .step { margin: 0.5rem 0; }
+    pre { background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>VecLite browser smoke test</h1>
+  <p>Serves as the manual verification for the browser WASM init path (<code>VecLite.init()</code> with no arguments — uses <code>fetch</code> + <code>import.meta.url</code>).</p>
+  <p><strong>To run:</strong> <code>npx serve . -p 3000</code> then open <a href="http://localhost:3000/docs/smoke-test.html">http://localhost:3000/docs/smoke-test.html</a></p>
+  <hr>
+  <div id="log"></div>
+  <pre id="results">Running…</pre>
+
+  <script type="module">
+    // Use absolute path so dist/ relative imports resolve correctly
+    import { VecLite, MemoryAdapter } from '/dist/index.js'
+
+    const log = document.getElementById('log')
+    const out = document.getElementById('results')
+
+    function step(msg, ok) {
+      const div = document.createElement('div')
+      div.className = `step ${ok === undefined ? '' : ok ? 'pass' : 'fail'}`
+      div.textContent = `${ok === undefined ? '⏳' : ok ? '✓' : '✗'} ${msg}`
+      log.appendChild(div)
+    }
+
+    async function run() {
+      try {
+        // 1. Init — browser path: fetch veclite_bg.wasm relative to the chunk
+        step('VecLite.init() — loading WASM via fetch…')
+        const t0 = performance.now()
+        await VecLite.init()
+        const initMs = (performance.now() - t0).toFixed(1)
+        step(`VecLite.init() completed in ${initMs}ms`, true)
+
+        // 2. Create index
+        const adapter = new MemoryAdapter()
+        const db = new VecLite({ dimensions: 4, storage: adapter })
+        step('new VecLite({ dimensions: 4 })', true)
+
+        // 3. Upsert
+        db.upsert([
+          { id: 'cat',  vector: [1, 0, 0, 0], metadata: { animal: 'cat' } },
+          { id: 'dog',  vector: [0, 1, 0, 0], metadata: { animal: 'dog' } },
+          { id: 'cat2', vector: [0.9, 0.1, 0, 0], metadata: { animal: 'cat' } },
+        ])
+        step(`upsert 3 vectors → db.size = ${db.size}`, db.size === 3)
+
+        // 4. Search without filter
+        const all = db.search({ vector: [1, 0, 0, 0], topK: 3 })
+        const allOk = all[0].id === 'cat' && all.length === 3
+        step(`search topK=3 — top result: "${all[0].id}" score=${all[0].score.toFixed(4)}`, allOk)
+
+        // 5. Search with filter
+        const filtered = db.search({ vector: [1, 0, 0, 0], topK: 3, filter: { animal: 'cat' } })
+        const filterOk = filtered.length === 2 && filtered.every(r => r.metadata.animal === 'cat')
+        step(`search filter={animal:'cat'} → ${filtered.length} results`, filterOk)
+
+        // 6. Delete
+        db.delete(['cat2'])
+        step(`delete(['cat2']) → db.size = ${db.size}`, db.size === 2)
+
+        // 7. Save + Load
+        await db.save()
+        const db2 = new VecLite({ dimensions: 4, storage: adapter })
+        step('save() succeeded', true)
+
+        // 8. Summary
+        const allPassed = allOk && filterOk && db.size === 2
+        out.textContent = allPassed
+          ? '✓ All checks passed — browser WASM init path works correctly.'
+          : '✗ Some checks failed — see log above.'
+        out.style.color = allPassed ? 'green' : 'red'
+
+      } catch (err) {
+        step(`ERROR: ${err.message}`, false)
+        out.textContent = `✗ ${err.stack}`
+        out.style.color = 'red'
+      }
+    }
+
+    run()
+  </script>
+</body>
+</html>

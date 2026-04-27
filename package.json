@@ -23,7 +23,7 @@
     "test": "vitest run",
     "test:rust": "cd rust && cargo test",
     "test:watch": "vitest",
-    "bench": "vitest bench"
+    "bench": "vitest bench --run"
   },
   "devDependencies": {
     "tsup": "^8.0.0",

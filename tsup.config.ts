@@ -1,3 +1,4 @@
+import { copyFileSync } from 'fs'
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
@@ -6,4 +7,7 @@ export default defineConfig({
   dts: true,
   clean: true,
   external: [/\.wasm$/],
+  async onSuccess() {
+    copyFileSync('src/wasm/veclite_bg.wasm', 'dist/veclite_bg.wasm')
+  },
 })

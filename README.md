@@ -180,19 +180,25 @@ npm run bench       # VecLite vs pure-JS benchmark
 
 ## Benchmarks
 
-Run `npm run bench` to compare VecLite against a pure-JS Float32Array implementation:
+Run `npm run bench` to compare VecLite against a pure-JS Float32Array implementation.
+Measured on Apple M-series, dim=128, topK=10:
 
 ```
- 1,000 vectors · dim=128 · topK=10
-  VecLite  (Rust/WASM)  ~0.8ms
-  pure JS  (Float32Array)  ~3.2ms   (4× slower)
-
- 10,000 vectors · dim=128 · topK=10
-  VecLite  (Rust/WASM)  ~6ms
-  pure JS  (Float32Array)  ~28ms    (5× slower)
+ 1,000 vectors   VecLite 0.087ms  pure JS 0.37ms   → 4.2× faster
+ 5,000 vectors   VecLite 0.42ms   pure JS 2.06ms   → 4.9× faster
+10,000 vectors   VecLite 0.82ms   pure JS 4.34ms   → 5.3× faster
 ```
 
-For OpenAI `text-embedding-3-small` (1536 dims), the gap is wider — set `DIM=1536` to reproduce locally.
+The gap widens with vector count as WASM's memory layout and SIMD-friendly f32 arithmetic pull further ahead. For OpenAI `text-embedding-3-large` (3072 dims) the advantage is larger still — set `DIM=3072` to reproduce locally.
+
+## Bundle size
+
+| File | Raw | Gzip | Brotli |
+|------|-----|------|--------|
+| `veclite_bg.wasm` | 120 KB | 60 KB | 52 KB |
+| `index.js` (ESM glue) | 17 KB | — | — |
+
+The WASM binary is loaded on demand via `VecLite.init()` and cached by the browser.
 
 ## Roadmap
 

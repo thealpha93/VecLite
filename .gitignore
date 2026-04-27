@@ -166,3 +166,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# wasm-pack output (build artifact — run `npm run build:wasm` to regenerate)
+src/wasm/
