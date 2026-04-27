@@ -1,0 +1,32 @@
+{
+  "name": "veclite",
+  "version": "0.1.0",
+  "description": "Client-side vector search. Rust/WASM powered, works where pure JS breaks down.",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build:wasm": "wasm-pack build rust --target web --out-dir ../src/wasm",
+    "build:ts": "tsup",
+    "build": "npm run build:wasm && npm run build:ts",
+    "test": "vitest run",
+    "test:rust": "cd rust && cargo test",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}
