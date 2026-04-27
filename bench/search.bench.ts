@@ -17,9 +17,9 @@ import { MemoryAdapter, VecLite } from '../src/index.js'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 
-const DIM = Number(process.env.DIM ?? 128)
+const DIM = Number(process.env.DIM ?? 1536)
 const TOP_K = 10
-const COUNTS = (process.env.COUNTS ?? '1000,5000,10000').split(',').map(Number)
+const COUNTS = (process.env.COUNTS ?? '10000,50000,100000').split(',').map(Number)
 
 function randomVec(dim: number): number[] {
   return Array.from({ length: dim }, () => Math.random() * 2 - 1)
@@ -69,12 +69,20 @@ beforeAll(async () => {
 
 for (const c of cases) {
   describe(`${c.count.toLocaleString()} vectors · dim=${DIM} · topK=${TOP_K}`, () => {
-    bench('VecLite  (Rust/WASM)', () => {
-      c.db!.search({ vector: c.query, topK: TOP_K })
-    })
+    bench(
+      'VecLite  (Rust/WASM)',
+      () => {
+        c.db!.search({ vector: c.query, topK: TOP_K })
+      },
+      { time: 30000 },
+    )
 
-    bench('pure JS  (Float32Array)', () => {
-      jsSearch(c.f32Vectors, c.f32Query, TOP_K)
-    })
+    bench(
+      'pure JS  (Float32Array)',
+      () => {
+        jsSearch(c.f32Vectors, c.f32Query, TOP_K)
+      },
+      { time: 30000 },
+    )
   })
 }

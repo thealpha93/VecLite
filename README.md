@@ -1,6 +1,8 @@
 # VecLite
 
-**Client-side vector search that scales.**
+[![npm version](https://img.shields.io/npm/v/veclite.svg)](https://www.npmjs.com/package/veclite)
+[![CI](https://github.com/thealpha93/VecLite/actions/workflows/ci.yml/badge.svg)](https://github.com/thealpha93/VecLite/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)**Client-side vector search that scales.**
 Rust/WASM powered — works where pure JS breaks down.
 
 Search 10k, 50k, 100k+ vectors in the browser. No server. No API keys.
@@ -169,8 +171,8 @@ import {
 # Prerequisites: Rust (stable), wasm-pack, Node.js 20+
 cargo install wasm-pack
 
-git clone https://github.com/your-org/veclite
-cd veclite
+git clone https://github.com/thealpha93/VecLite.git
+cd VecLite
 npm install
 npm run build       # wasm-pack + tsup
 npm test            # vitest

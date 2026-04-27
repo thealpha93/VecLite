@@ -2,6 +2,26 @@
   "name": "veclite",
   "version": "0.1.0",
   "description": "Client-side vector search. Rust/WASM powered, works where pure JS breaks down.",
+  "author": "Aakash/thealpha93 <tmaakash143@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/thealpha93/VecLite#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thealpha93/VecLite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thealpha93/VecLite/issues"
+  },
+  "keywords": [
+    "vector",
+    "search",
+    "vector-search",
+    "wasm",
+    "vector-database",
+    "rust",
+    "browser",
+    "embeddings"
+  ],
   "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
