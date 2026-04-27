@@ -1,0 +1,298 @@
+import { readFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
+import { beforeAll, describe, expect, it } from 'vitest'
+import {
+  MemoryAdapter,
+  VecLite,
+  VecLiteDimensionError,
+  VecLiteIndexError,
+  VecLiteValidationError,
+} from '../src/index.js'
+
+const __dir = dirname(fileURLToPath(import.meta.url))
+
+beforeAll(async () => {
+  const wasmBytes = readFileSync(join(__dir, '../src/wasm/veclite_bg.wasm'))
+  await VecLite.init(wasmBytes)
+})
+
+function make(dimensions = 3) {
+  return new VecLite({ dimensions, storage: new MemoryAdapter() })
+}
+
+describe('init', () => {
+  it('is idempotent — calling twice does not throw', async () => {
+    await expect(VecLite.init()).resolves.toBeUndefined()
+  })
+
+  it('throws VecLiteIndexError if constructor called without init', () => {
+    const origReady = (VecLite as any).wasmReady
+    ;(VecLite as any).wasmReady = false
+    expect(() => new VecLite({ dimensions: 3, storage: new MemoryAdapter() })).toThrow(
+      VecLiteIndexError,
+    )
+    ;(VecLite as any).wasmReady = origReady
+  })
+})
+
+describe('upsert + search', () => {
+  it('upserted vector is found and score is 1.0 for identical query', () => {
+    const db = make()
+    db.upsert([{ id: 'a', vector: [1, 0, 0], metadata: { cat: 'science' } }])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe('a')
+    expect(results[0].score).toBeCloseTo(1.0, 5)
+    expect(results[0].metadata.cat).toBe('science')
+  })
+
+  it('results are sorted by score descending', () => {
+    const db = make()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0] },
+      { id: 'b', vector: [0, 1, 0] },
+      { id: 'c', vector: [1, 1, 0] },
+    ])
+    const [first, second, third] = db.search({ vector: [1, 0, 0], topK: 3 })
+    expect(first.id).toBe('a')
+    expect(second.id).toBe('c')
+    expect(third.id).toBe('b')
+  })
+
+  it('topK limits results', () => {
+    const db = make()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0] },
+      { id: 'b', vector: [0, 1, 0] },
+      { id: 'c', vector: [0, 0, 1] },
+    ])
+    expect(db.search({ vector: [1, 0, 0], topK: 2 })).toHaveLength(2)
+  })
+
+  it('upsert replaces entry with the same id', () => {
+    const db = make()
+    db.upsert([{ id: 'a', vector: [1, 0, 0] }])
+    db.upsert([{ id: 'a', vector: [0, 1, 0] }])
+    expect(db.size).toBe(1)
+    const results = db.search({ vector: [0, 1, 0], topK: 1 })
+    expect(results[0].score).toBeCloseTo(1.0, 5)
+  })
+
+  it('metadata without explicit field defaults to empty object', () => {
+    const db = make()
+    db.upsert([{ id: 'a', vector: [1, 0, 0] }])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    expect(results[0].metadata).toEqual({})
+  })
+})
+
+describe('size', () => {
+  it('reflects current entry count through mutations', () => {
+    const db = make()
+    expect(db.size).toBe(0)
+    db.upsert([{ id: 'a', vector: [1, 0, 0] }])
+    expect(db.size).toBe(1)
+    db.upsert([{ id: 'b', vector: [0, 1, 0] }])
+    expect(db.size).toBe(2)
+    db.delete(['a'])
+    expect(db.size).toBe(1)
+    db.clear()
+    expect(db.size).toBe(0)
+  })
+})
+
+describe('filter', () => {
+  it('string filter — only matching entries are returned', () => {
+    const db = make()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0], metadata: { cat: 'science' } },
+      { id: 'b', vector: [1, 0, 0], metadata: { cat: 'math' } },
+    ])
+    const results = db.search({ vector: [1, 0, 0], topK: 10, filter: { cat: 'science' } })
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe('a')
+  })
+
+  it('number filter', () => {
+    const db = make()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0], metadata: { year: 2024 } },
+      { id: 'b', vector: [1, 0, 0], metadata: { year: 2025 } },
+    ])
+    const results = db.search({ vector: [1, 0, 0], topK: 10, filter: { year: 2024 } })
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe('a')
+  })
+
+  it('bool filter', () => {
+    const db = make()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0], metadata: { active: true } },
+      { id: 'b', vector: [1, 0, 0], metadata: { active: false } },
+    ])
+    const results = db.search({ vector: [1, 0, 0], topK: 10, filter: { active: true } })
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe('a')
+  })
+
+  it('no filter returns all candidates', () => {
+    const db = make()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0] },
+      { id: 'b', vector: [0, 1, 0] },
+    ])
+    expect(db.search({ vector: [1, 0, 0], topK: 10 })).toHaveLength(2)
+  })
+
+  it('empty filter {} matches all candidates', () => {
+    const db = make()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0], metadata: { cat: 'science' } },
+      { id: 'b', vector: [1, 0, 0], metadata: { cat: 'math' } },
+    ])
+    expect(db.search({ vector: [1, 0, 0], topK: 10, filter: {} })).toHaveLength(2)
+  })
+
+  it('filter on missing key returns no results', () => {
+    const db = make()
+    db.upsert([{ id: 'a', vector: [1, 0, 0], metadata: { cat: 'science' } }])
+    const results = db.search({ vector: [1, 0, 0], topK: 10, filter: { year: 2024 } })
+    expect(results).toHaveLength(0)
+  })
+})
+
+describe('delete + clear', () => {
+  it('delete removes entries by id', () => {
+    const db = make()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0] },
+      { id: 'b', vector: [0, 1, 0] },
+    ])
+    db.delete(['a'])
+    expect(db.size).toBe(1)
+    expect(db.search({ vector: [1, 0, 0], topK: 10 })[0].id).toBe('b')
+  })
+
+  it('delete of non-existent id is a no-op', () => {
+    const db = make()
+    db.upsert([{ id: 'a', vector: [1, 0, 0] }])
+    db.delete(['nonexistent'])
+    expect(db.size).toBe(1)
+  })
+
+  it('clear empties the index', () => {
+    const db = make()
+    db.upsert([{ id: 'a', vector: [1, 0, 0] }])
+    db.clear()
+    expect(db.size).toBe(0)
+    expect(db.search({ vector: [1, 0, 0], topK: 10 })).toHaveLength(0)
+  })
+})
+
+describe('validation', () => {
+  it('throws VecLiteDimensionError on wrong vector length in upsert', () => {
+    const db = make(3)
+    expect(() => db.upsert([{ id: 'a', vector: [1, 0] }])).toThrow(VecLiteDimensionError)
+  })
+
+  it('throws VecLiteDimensionError on wrong vector length in search', () => {
+    const db = make(3)
+    expect(() => db.search({ vector: [1, 0], topK: 1 })).toThrow(VecLiteDimensionError)
+  })
+
+  it('throws VecLiteValidationError for NaN in vector', () => {
+    const db = make()
+    expect(() => db.upsert([{ id: 'a', vector: [1, NaN, 0] }])).toThrow(VecLiteValidationError)
+  })
+
+  it('throws VecLiteValidationError for Infinity in vector', () => {
+    const db = make()
+    expect(() => db.upsert([{ id: 'a', vector: [1, Infinity, 0] }])).toThrow(
+      VecLiteValidationError,
+    )
+  })
+
+  it('throws VecLiteValidationError for -Infinity in vector', () => {
+    const db = make()
+    expect(() => db.upsert([{ id: 'a', vector: [1, -Infinity, 0] }])).toThrow(
+      VecLiteValidationError,
+    )
+  })
+
+  it('silently drops __proto__ metadata key', () => {
+    const db = make()
+    db.upsert([{ id: 'a', vector: [1, 0, 0], metadata: { __proto__: 'evil', safe: 'ok' } as any }])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    expect(Object.prototype.hasOwnProperty.call(results[0].metadata, '__proto__')).toBe(false)
+    expect(results[0].metadata.safe).toBe('ok')
+  })
+
+  it('silently drops constructor and prototype metadata keys', () => {
+    const db = make()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0], metadata: { constructor: 'x', prototype: 'y' } as any },
+    ])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    expect(Object.prototype.hasOwnProperty.call(results[0].metadata, 'constructor')).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(results[0].metadata, 'prototype')).toBe(false)
+  })
+
+  it('throws VecLiteValidationError for object metadata value', () => {
+    const db = make()
+    expect(() =>
+      db.upsert([{ id: 'a', vector: [1, 0, 0], metadata: { bad: {} as any } }]),
+    ).toThrow(VecLiteValidationError)
+  })
+})
+
+describe('persistence', () => {
+  it('save + load round-trips entries through MemoryAdapter', async () => {
+    const adapter = new MemoryAdapter()
+
+    const db1 = new VecLite({ dimensions: 3, storage: adapter })
+    db1.upsert([
+      { id: 'a', vector: [1, 0, 0], metadata: { cat: 'science' } },
+      { id: 'b', vector: [0, 1, 0], metadata: { year: 2024 } },
+    ])
+    await db1.save()
+
+    const db2 = new VecLite({ dimensions: 3, storage: adapter })
+    await db2.load()
+    expect(db2.size).toBe(2)
+    const results = db2.search({ vector: [1, 0, 0], topK: 1 })
+    expect(results[0].id).toBe('a')
+    expect(results[0].metadata.cat).toBe('science')
+  })
+
+  it('load from empty adapter is a no-op', async () => {
+    const db = new VecLite({ dimensions: 3, storage: new MemoryAdapter() })
+    await expect(db.load()).resolves.toBeUndefined()
+    expect(db.size).toBe(0)
+  })
+
+  it('save overwrites previous save — clear then save persists empty state', async () => {
+    const adapter = new MemoryAdapter()
+    const db1 = new VecLite({ dimensions: 3, storage: adapter })
+    db1.upsert([{ id: 'a', vector: [1, 0, 0] }])
+    await db1.save()
+    db1.clear()
+    await db1.save()
+
+    const db2 = new VecLite({ dimensions: 3, storage: adapter })
+    await db2.load()
+    expect(db2.size).toBe(0)
+  })
+
+  it('load into non-empty index merges (upsert semantics)', async () => {
+    const adapter = new MemoryAdapter()
+    const db1 = new VecLite({ dimensions: 3, storage: adapter })
+    db1.upsert([{ id: 'a', vector: [1, 0, 0] }])
+    await db1.save()
+
+    const db2 = new VecLite({ dimensions: 3, storage: adapter })
+    db2.upsert([{ id: 'b', vector: [0, 1, 0] }])
+    await db2.load()
+    expect(db2.size).toBe(2)
+  })
+})

@@ -24,8 +24,10 @@ interface WasmFlatIndex {
   free(): void
 }
 
+type WasmInput = string | URL | ArrayBuffer | Uint8Array
+
 type WasmModule = {
-  default: (path?: string | URL) => Promise<unknown>
+  default: (input?: { module_or_path: WasmInput } | WasmInput) => Promise<unknown>
   FlatIndex: new (dimensions: number) => WasmFlatIndex
 }
 
@@ -38,10 +40,10 @@ export class VecLite {
   private readonly dimensions: number
   private readonly maxVectors: number | undefined
 
-  static async init(): Promise<void> {
+  static async init(wasmInput?: WasmInput): Promise<void> {
     if (VecLite.wasmReady) return
     wasm = (await import('./wasm/veclite.js')) as WasmModule
-    await wasm.default()
+    await wasm.default(wasmInput !== undefined ? { module_or_path: wasmInput } : undefined)
     VecLite.wasmReady = true
   }
 
