@@ -198,14 +198,21 @@ VecLiteStorageError     // storage adapter failure (any backend)
 - SIMD optimisation
 
 ## Current state
-- Architecture designed
-- CLAUDE.md created
-- No code written yet
+- v0.1 complete and verified
+- All Rust source files implemented and tested (25 unit tests)
+- Full TypeScript API layer implemented and tested (53 tests)
+- Build toolchain working: wasm-pack + tsup, WASM copied to dist/
+- Browser WASM init path verified manually via docs/smoke-test.html
+- CI configured (.github/workflows/ci.yml)
+- Bundle: 120KB WASM raw / 52KB brotli, 17KB JS ESM
+- Benchmark: 4.2–5.3× faster than pure-JS Float32Array at 1k–10k vectors (dim=128)
 
 ## What we're working on next
-- POC: compile cosine similarity Rust fn to WASM
-- Validate bundle size
-- Benchmark vs pure JS at 10k, 50k, 100k vectors
+- v0.2: HNSW approximate nearest neighbour
+- v0.2: L2 distance metric
+- v0.2: Metadata filter operators ($gte, $lte, $in)
+- v0.2: Web Worker support
+- Publish to npm
 
 ## Competitors
 - Vectra — Node.js only, pure JS, file-based
@@ -215,5 +222,5 @@ VecLiteStorageError     // storage adapter failure (any backend)
 
 ## Session notes
 [Update at start and end of every session]
-- Last session: Architecture design + storage adapter pattern finalised
+- Last session: v0.1 fully implemented — Rust core, TypeScript API, tests, CI, benchmarks, browser verification
 - Next session: POC implementation
