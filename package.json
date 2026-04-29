@@ -1,6 +1,6 @@
 {
   "name": "veclite",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Client-side vector search. Rust/WASM powered, works where pure JS breaks down.",
   "author": "Aakash/thealpha93 <tmaakash143@gmail.com>",
   "license": "MIT",
