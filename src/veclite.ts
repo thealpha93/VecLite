@@ -9,7 +9,7 @@ import {
   type VecLiteConfig,
   type VectorEntry,
 } from './types.js'
-import { sanitizeMetadata, validateVector } from './validator.js'
+import { sanitizeMetadata, validateFilter, validateVector } from './validator.js'
 import { flattenVectors, vectorToFloat32Array } from './utils.js'
 
 // Minimal interface matching the wasm-pack generated FlatIndex class.
@@ -89,10 +89,11 @@ export class VecLite {
 
   search(options: SearchOptions): SearchResult[] {
     validateVector(options.vector, this.dimensions)
-    const filterJson =
-      options.filter && Object.keys(options.filter).length > 0
-        ? JSON.stringify(options.filter)
-        : 'null'
+    const hasFilter = options.filter && Object.keys(options.filter).length > 0
+    if (hasFilter) {
+      validateFilter(options.filter!)
+    }
+    const filterJson = hasFilter ? JSON.stringify(options.filter) : 'null'
     const raw = this.index.search(
       vectorToFloat32Array(options.vector),
       options.topK,

@@ -2,8 +2,12 @@
 
 This document outlines the planned future development for VecLite. This is a living document and priorities may shift based on community feedback.
 
-## Current Status: v0.1.0
+## Current Status: v0.2.0
 *Status: Released*
+
+---
+
+## Released: v0.1.0
 
 The initial release focuses on correctness, stability, and proving the Rust/WASM and TypeScript hybrid architecture.
 - [x] Brute-force exact-match flat index
@@ -14,16 +18,11 @@ The initial release focuses on correctness, stability, and proving the Rust/WASM
 
 ---
 
-## Planned: v0.2.0
+## Released: v0.2.0
 *Focus: Performance at production dimensions + richer filtering*
 
-Benchmarks from v0.1 show a 2.8x speedup over pure JS at 1536-dimensional vectors (OpenAI embedding size). v0.2 targets two things: closing that gap further with SIMD, and making the query engine production-ready with operator-based filtering.
-
-### Performance
-- **SIMD Optimisations:** Enable WebAssembly SIMD instructions for cosine similarity computation. At production embedding dimensions (1536), SIMD processes multiple f32 values simultaneously — expected to deliver a meaningful additional speedup beyond the v0.1 baseline. Controlled via a Cargo feature flag with scalar fallback for environments without SIMD support.
-
-### Query Engine
-- **Advanced Metadata Filter Operators:** Adding support for Mongo-style query operators: `$gte`, `$lte`, `$in`, `$ne`. Exact-match filters from v0.1 remain fully backwards compatible.
+- [x] **SIMD Optimisation:** Explicit `core::arch::wasm32` f32x4 intrinsics for cosine similarity. Gated by `simd` Cargo feature flag; scalar fallback for non-WASM targets. `simd128` target feature enabled via `.cargo/config.toml` for all wasm32 builds.
+- [x] **Metadata Filter Operators:** `$gte`, `$lte`, `$in`, `$ne`. Mixed freely with exact-match values. AND semantics across keys and operators. v0.1 exact-match filters fully backwards compatible.
 
 ---
 

@@ -1,12 +1,12 @@
 /**
  * VecLite vs pure-JS brute-force search benchmark.
  *
- * Dimensions: 128  (set DIM=1536 locally to simulate OpenAI embeddings)
- * Counts:     1k, 5k, 10k
+ * Dimensions: 1536  (OpenAI embedding size)
+ * Counts:     10k, 50k, 100k
  * topK:       10
  *
  * Run:  npm run bench
- * Full: DIM=1536 COUNTS=10000,50000,100000 npm run bench
+ * Override: DIM=128 COUNTS=1000,5000 npm run bench
  */
 
 import { readFileSync } from 'fs'
@@ -43,6 +43,9 @@ function jsSearch(vectors: Float32Array[], query: Float32Array, topK: number) {
   return scored.slice(0, topK)
 }
 
+// Fixed 10k count for filtered benchmarks
+const FILTER_COUNT = 10_000
+
 // Pre-generate all test data at module load (setup, not measured)
 const cases = COUNTS.map((count) => {
   const rawVectors = Array.from({ length: count }, () => randomVec(DIM))
@@ -56,6 +59,15 @@ const cases = COUNTS.map((count) => {
   }
 })
 
+// Filter benchmark state — 10k vectors, each tagged with a score and category
+const filterCase = {
+  rawVectors: Array.from({ length: FILTER_COUNT }, () => randomVec(DIM)),
+  query: randomVec(DIM),
+  // ~50 % selectivity: even-indexed entries have score >= 50
+  // ~25 % selectivity: every 4th entry is category "a"
+  db: null as VecLite | null,
+}
+
 // Single top-level beforeAll — init WASM once, populate all indices
 beforeAll(async () => {
   const wasmBytes = readFileSync(join(__dir, '../src/wasm/veclite_bg.wasm'))
@@ -65,7 +77,22 @@ beforeAll(async () => {
     c.db = new VecLite({ dimensions: DIM, storage: new MemoryAdapter() })
     c.db.upsert(c.rawVectors.map((v, i) => ({ id: String(i), vector: v })))
   }
+
+  // Filtered benchmark index: metadata with `score` and `category`
+  filterCase.db = new VecLite({ dimensions: DIM, storage: new MemoryAdapter() })
+  filterCase.db.upsert(
+    filterCase.rawVectors.map((v, i) => ({
+      id: String(i),
+      vector: v,
+      metadata: {
+        score: (i % 2 === 0) ? 75 : 25,          // 50 % have score >= 50
+        category: (i % 4 === 0) ? 'a' : 'other', // 25 % have category 'a'
+      },
+    })),
+  )
 })
+
+// ── Unfiltered vs pure-JS ────────────────────────────────────────────────────
 
 for (const c of cases) {
   describe(`${c.count.toLocaleString()} vectors · dim=${DIM} · topK=${TOP_K}`, () => {
@@ -86,3 +113,39 @@ for (const c of cases) {
     )
   })
 }
+
+// ── Pre-filter efficiency ─────────────────────────────────────────────────────
+
+describe(`${FILTER_COUNT.toLocaleString()} vectors · dim=${DIM} · topK=${TOP_K} · filter benchmarks`, () => {
+  bench(
+    'unfiltered (baseline)',
+    () => {
+      filterCase.db!.search({ vector: filterCase.query, topK: TOP_K })
+    },
+    { time: 30000 },
+  )
+
+  bench(
+    '$gte filter  (~50 % selectivity)',
+    () => {
+      filterCase.db!.search({
+        vector: filterCase.query,
+        topK: TOP_K,
+        filter: { score: { $gte: 50 } },
+      })
+    },
+    { time: 30000 },
+  )
+
+  bench(
+    '$in filter   (~25 % selectivity)',
+    () => {
+      filterCase.db!.search({
+        vector: filterCase.query,
+        topK: TOP_K,
+        filter: { category: { $in: ['a'] } },
+      })
+    },
+    { time: 30000 },
+  )
+})

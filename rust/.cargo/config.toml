@@ -1,0 +1,7 @@
+# Enable WebAssembly SIMD128 instructions for all wasm32 builds.
+# This lets the compiler auto-vectorise scalar loops and is required for
+# the explicit core::arch::wasm32 intrinsics used by the "simd" feature.
+# cargo test (native target) is unaffected — this section only applies
+# when the build target is wasm32-unknown-unknown.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

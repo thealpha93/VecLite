@@ -37,7 +37,7 @@
     "dist"
   ],
   "scripts": {
-    "build:wasm": "wasm-pack build rust --target web --out-dir ../src/wasm",
+    "build:wasm": "wasm-pack build rust --target web --out-dir ../src/wasm --features simd",
     "build:ts": "tsup",
     "build": "npm run build:wasm && npm run build:ts",
     "test": "vitest run",

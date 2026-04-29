@@ -11,6 +11,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.0] — 2026-04-27
+
+### Added
+
+#### SIMD optimisation
+- `cosine_similarity_simd` — explicit `core::arch::wasm32` f32x4 intrinsics; 4-lane loop with scalar tail for remainder elements
+- `simd` Cargo feature flag gates the SIMD code path; scalar fallback compiles on all other targets
+- `rust/.cargo/config.toml` enables `target-feature=+simd128` for all `wasm32-unknown-unknown` builds — enables both hand-written SIMD and compiler auto-vectorisation
+- `build:wasm` npm script now passes `--features simd` by default
+
+#### Metadata filter operators
+- `$gte` — field value ≥ threshold (numbers only; returns false for other types)
+- `$lte` — field value ≤ threshold (numbers only; returns false for other types)
+- `$in` — field value is a member of the provided array (any `MetadataValue` type)
+- `$ne` — field value does not equal the given value (any `MetadataValue` type)
+- Multiple operators on the same key use **AND** semantics
+- Operator predicates and exact-match values can be freely mixed in a single filter
+- v0.1 exact-match filters (`{ category: 'science' }`) remain fully backwards compatible
+
+#### TypeScript types
+- `FilterOperator` type exported from `veclite`
+- `FilterValue = MetadataValue | FilterOperator` type exported from `veclite`
+- `SearchOptions.filter` updated from `Partial<Metadata>` to `Record<string, FilterValue>`
+
+#### Validation
+- `validateFilter` in `validator.ts` — rejects unknown operator keys, wrong value types, and empty operator objects before the WASM boundary
+
+#### Tests
+- 23 new Rust unit tests in `filter.rs` covering all operators, AND combinations, and mixed exact+operator filters
+- 8 new test for `simd_and_scalar_paths_return_identical_results` in `similarity.rs`
+- 17 new `validateFilter` unit tests in `validator.test.ts`
+- 16 new filter-operator integration tests in `veclite.test.ts`
+- Total: 48 Rust tests, 86 TypeScript/Vitest tests
+
+#### Benchmarks
+- New filter benchmark cases: `$gte` at ~50% selectivity and `$in` at ~25% selectivity vs unfiltered baseline
+
+### Changed
+- `Cargo.toml` version bumped to `0.2.0`
+- `rust/src/types.rs` — added `FilterOperator` struct and `FilterValue` untagged enum
+- `rust/src/filter.rs` — `Filter` type changed from `HashMap<String, MetadataValue>` to `HashMap<String, FilterValue>`
+
+---
+
 ## [0.1.0] — 2026-04-27
 
 Initial release. 🎉

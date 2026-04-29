@@ -58,12 +58,12 @@ All async, persistence, and validation lives in TypeScript.
 
 ### Algorithm
 - v0.1: Flat index, brute force cosine similarity
-- v0.2: HNSW approximate nearest neighbour
-- Rationale: Ship fast, get users, add HNSW once adoption confirmed
+- v0.2: SIMD-accelerated cosine similarity (core::arch::wasm32 f32x4, simd Cargo feature)
+- v0.3: HNSW approximate nearest neighbour
 
 ### Metadata filtering
 - v0.1: Exact match only — { category: 'science' }
-- v0.2: Basic operators — { score: { $gte: 0.8 } }
+- v0.2: Operator predicates — $gte, $lte, $in, $ne; exact match fully backwards compatible
 - Strategy: Pre-filter (filter candidates first, then rank by similarity)
 - Rationale: Faster when filter is selective, simpler to reason about
 
@@ -77,7 +77,8 @@ All async, persistence, and validation lives in TypeScript.
 
 ### Similarity metric
 - v0.1: Cosine similarity only
-- v0.2: L2 (Euclidean) as option
+- v0.2: Cosine similarity with SIMD acceleration
+- v0.3: L2 (Euclidean) and dot product as options
 
 ### WASM loading
 - Explicit init: await VecLite.init() before first use
@@ -128,10 +129,11 @@ const db = new VecLite({
 - Methods: upsert, search, delete, save, load
 - Metadata: Record<string, string | number | boolean>
 
-## API (locked for v0.1)
+## API (v0.2)
 
 ```typescript
 import { VecLite, IndexedDBAdapter, MemoryAdapter } from 'veclite'
+import type { FilterOperator, FilterValue } from 'veclite'
 
 // Explicit init — required before first use
 await VecLite.init()
@@ -147,14 +149,26 @@ const db = new VecLite({ dimensions: 1536, storage: new MemoryAdapter() })
 
 // Upsert
 db.upsert([
-  { id: 'doc1', vector: [...], metadata: { category: 'science' } }
+  { id: 'doc1', vector: [...], metadata: { category: 'science', year: 2024 } }
 ])
 
-// Search with optional filter
+// Search — exact match (v0.1, still works)
 const results = db.search({
   vector: [...],
   topK: 5,
-  filter: { category: 'science' }  // exact match only in v0.1
+  filter: { category: 'science' }
+})
+
+// Search — operator predicates (v0.2)
+const results = db.search({
+  vector: [...],
+  topK: 5,
+  filter: {
+    category: 'science',        // exact match
+    year:     { $gte: 2022 },  // number ≥ 2022
+    status:   { $ne: 'archived' },
+    tags:     { $in: ['ml', 'ai'] },
+  }
 })
 
 // Persistence
@@ -189,29 +203,29 @@ VecLiteStorageError     // storage adapter failure (any backend)
 - Serialise metadata to JSON string before crossing
 - Validate everything before it crosses — Rust should never receive malformed input
 
-## What's deliberately deferred to v0.2
+## What's deliberately deferred to v0.3+
 - HNSW index
-- L2 distance metric
-- Metadata filter operators ($gte, $lte, $in etc.)
+- L2 distance metric and dot product
+- Filter operators beyond $gte, $lte, $in, $ne (e.g. $exists, $regex)
 - Node.js support
 - Web Worker support
-- SIMD optimisation
+- Chunked persistence (currently: full JSON blob per save)
 
 ## Current state
-- v0.1 complete and verified
-- All Rust source files implemented and tested (25 unit tests)
-- Full TypeScript API layer implemented and tested (53 tests)
-- Build toolchain working: wasm-pack + tsup, WASM copied to dist/
+- v0.2 complete and verified
+- Rust: 48 unit tests (similarity, filter operators, index)
+- TypeScript: 86 Vitest tests (integration + unit)
+- SIMD: explicit f32x4 intrinsics in similarity.rs, simd Cargo feature, scalar fallback
+- Filter operators: $gte, $lte, $in, $ne; exact-match backwards compatible
+- Build toolchain working: wasm-pack --features simd + tsup, WASM copied to dist/
 - Browser WASM init path verified manually via docs/smoke-test.html
 - CI configured (.github/workflows/ci.yml)
 - Bundle: 120KB WASM raw / 52KB brotli, 17KB JS ESM
-- Benchmark: 4.2–5.3× faster than pure-JS Float32Array at 1k–10k vectors (dim=128)
 
 ## What we're working on next
-- v0.2: HNSW approximate nearest neighbour
-- v0.2: L2 distance metric
-- v0.2: Metadata filter operators ($gte, $lte, $in)
-- v0.2: Web Worker support
+- v0.3: HNSW approximate nearest neighbour
+- v0.3: L2 distance metric and dot product
+- v0.3: Chunked persistence for large indices
 - Publish to npm
 
 ## Competitors
@@ -222,5 +236,5 @@ VecLiteStorageError     // storage adapter failure (any backend)
 
 ## Session notes
 [Update at start and end of every session]
-- Last session: v0.1 fully implemented — Rust core, TypeScript API, tests, CI, benchmarks, browser verification
-- Next session: POC implementation
+- Last session: v0.2 fully implemented — SIMD cosine similarity (f32x4 intrinsics, simd feature flag), filter operators ($gte, $lte, $in, $ne), 48 Rust tests, 86 TypeScript tests, filter benchmarks, all docs updated
+- Next session: v0.3 planning — HNSW, L2 metric, or npm publish
