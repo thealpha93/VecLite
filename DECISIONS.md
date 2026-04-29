@@ -41,22 +41,23 @@ Do not relitigate these without explicit human approval.
 
 ---
 
-## ADR-003: Flat index for v0.1, HNSW for v0.2
+## ADR-003: Flat index for v0.1/v0.2, HNSW for v0.3
 
-**Decision:** v0.1 uses brute force flat index. HNSW deferred to v0.2.
+**Decision:** v0.1 and v0.2 use brute force flat index. HNSW deferred to v0.3.
 
 **Rationale:**
 - Flat index is exact, simple to implement, easy to test
 - Correctness is more important than speed at launch
 - HNSW is complex — wrong implementation silently returns bad results
 - Ship fast, get users, validate demand before investing in HNSW
-- Flat index is still fast enough at 50k vectors with Rust/WASM
+- Flat index is still fast enough at 50k vectors with Rust/WASM + SIMD
+- v0.2 used for SIMD + filter operators; HNSW pushed to v0.3
 
 **Alternatives considered:**
 - HNSW from day one — too complex, too risky for v0.1
 - IVFFlat — good middle ground but still adds complexity
 
-**Status:** Locked. Revisit after v0.1 adoption confirmed.
+**Status:** Locked. Implement in v0.3.
 
 ---
 
@@ -70,10 +71,10 @@ Do not relitigate these without explicit human approval.
 - Keeping one metric keeps the API surface small and testable
 
 **Alternatives considered:**
-- L2 (Euclidean) — useful for image embeddings, deferred to v0.2
+- L2 (Euclidean) — useful for image embeddings, deferred to v0.3
 - Dot product — faster but assumes normalised vectors, adds confusion
 
-**Status:** Locked. L2 and dot product deferred to v0.2.
+**Status:** Locked. L2 and dot product deferred to v0.3.
 
 ---
 
@@ -209,7 +210,7 @@ interface StorageAdapter {
 - IndexedDBAdapter — default browser adapter
 - MemoryAdapter — in-memory only, no persistence, ideal for testing
 
-**Status:** Locked. Revisit in v0.2 if query-level storage access is needed.
+**Status:** Locked. Revisit in v0.4 — chunked persistence ships first; domain-aware storage evaluated after, as it may be unnecessary if chunked persistence resolves memory pressure.
 
 ---
 
@@ -276,11 +277,19 @@ and asserts they agree within 1e-5.
 
 ## What's deferred — do not implement without explicit approval
 
+**Planned for v0.3 (algorithms):**
 - HNSW index
-- L2 / dot product distance metrics
-- Filter operators beyond $gte, $lte, $in, $ne (e.g. $exists, $regex)
-- Node.js support
-- React Native support
+- L2 / dot product distance metrics — metric abstraction designed here because HNSW needs it
+
+**Planned for v0.4 (storage):**
+- Chunked persistence — binary serialisation replacing the single JSON blob in save/load; versioned format with migration path from v0.1/v0.2 JSON snapshot
+- Domain-aware storage API (evaluation) — decided after chunked persistence ships; may be unnecessary
+
+**Planned for v0.5 (ecosystem):**
+- Node.js native support
 - Web Worker support
+- React Native support
 - Base64 inlined WASM option
-- Repository pattern / domain-aware storage
+
+**No version assigned:**
+- Filter operators beyond $gte, $lte, $in, $ne (e.g. $exists, $regex)

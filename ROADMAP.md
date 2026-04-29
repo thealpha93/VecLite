@@ -27,19 +27,28 @@ The initial release focuses on correctness, stability, and proving the Rust/WASM
 ---
 
 ## Planned: v0.3.0
-*Focus: Scale — handle larger datasets without breaking a sweat*
+*Focus: Algorithm — scale the search core*
+
+HNSW and distance metrics are coupled: HNSW internally needs a distance function, so the metric abstraction gets designed here regardless. Ship the full algorithm story together.
 
 ### Core Algorithms & Indexing
-- **HNSW Index (Approximate Nearest Neighbor):** Hierarchical Navigable Small World graphs to efficiently scale searches well beyond 100k vectors where brute-force becomes a bottleneck.
-- **Additional Distance Metrics:** L2 (Euclidean) distance and Dot Product alongside Cosine Similarity.
-
-### Storage
-- **Chunked Persistence:** Replacing the current single-blob save/load with chunked serialisation for datasets where a full JSON snapshot is impractical.
-- **Domain-Aware Storage API (Evaluation):** Re-evaluating the `StorageAdapter` to support selective index loading, preventing memory pressure on very large datasets.
+- **HNSW Index (Approximate Nearest Neighbor):** Hierarchical Navigable Small World graphs for sub-linear search beyond 100k vectors. Opt-in alongside the flat index — existing users unaffected. Recall tested against the flat index as ground truth before shipping.
+- **Additional Distance Metrics:** L2 (Euclidean) distance and Dot Product alongside Cosine Similarity. Metric specified at construction time; applies to both flat and HNSW index paths.
 
 ---
 
 ## Planned: v0.4.0
+*Focus: Storage — persistence at scale*
+
+Kept separate from v0.3 because the storage work is independent of the algorithm work, and the outcome of chunked persistence determines whether domain-aware storage is even necessary.
+
+### Storage
+- **Chunked Persistence:** Replacing the current single JSON blob in `save/load` with a binary format (packed f32 buffer + JSON metadata sidecar). Includes a versioned format and migration path from the v0.1/v0.2 JSON snapshot.
+- **Domain-Aware Storage API (Evaluation):** Re-evaluating the `StorageAdapter` interface to support selective index loading. Decided after chunked persistence ships — may be unnecessary if chunked persistence resolves memory pressure on its own.
+
+---
+
+## Planned: v0.5.0
 *Focus: Ecosystem — run VecLite everywhere*
 
 ### Runtimes
@@ -52,7 +61,7 @@ The initial release focuses on correctness, stability, and proving the Rust/WASM
 
 ---
 
-## Beyond v0.4
+## Beyond v0.5
 
 Features not on the immediate roadmap but under consideration:
 - Cloud syncing mechanisms
