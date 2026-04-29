@@ -13,7 +13,7 @@ Pure JS vector search tops out around 1k–5k vectors before latency becomes not
 
 | Library | Runtime | Target scale | Algorithm |
 |---|---|---|---|
-| VecLite | Rust/WASM | 10k–100k+ | Brute-force (v0.1), HNSW (v0.2) |
+| VecLite | Rust/WASM + SIMD | 10k–100k+ | Brute-force flat index |
 | Vectra | Pure JS | ≤5k | Brute-force, Node.js only |
 | client-vector-search | Pure JS | ~1k | Brute-force |
 
@@ -42,11 +42,11 @@ db.upsert([
   { id: 'doc2', vector: [...], metadata: { category: 'math',    year: 2023 } },
 ])
 
-// 4. Search
+// 4. Search — exact match or operator predicates
 const results = db.search({
   vector: queryEmbedding,
   topK: 5,
-  filter: { category: 'science' },  // exact match only in v0.1
+  filter: { category: 'science', year: { $gte: 2023 } },
 })
 // → [{ id: 'doc1', score: 0.94, metadata: { category: 'science', year: 2024 } }, ...]
 
@@ -100,10 +100,25 @@ Returns results sorted by cosine similarity (highest first).
 const results = db.search({
   vector: queryEmbedding,
   topK: 10,
-  filter: { category: 'science' },  // optional exact-match filter
+  filter: { category: 'science' },              // exact match (v0.1 style)
+})
+
+// Operator predicates (v0.2) — mix freely with exact-match keys
+const results = db.search({
+  vector: queryEmbedding,
+  topK: 10,
+  filter: {
+    category: 'science',          // exact match
+    year:     { $gte: 2020 },     // number ≥ 2020
+    score:    { $lte: 0.9 },      // number ≤ 0.9
+    tags:     { $in: ['ai', 'ml'] }, // value is in array
+    status:   { $ne: 'archived' }, // not equal
+  },
 })
 // result: Array<{ id: string, score: number, metadata: Metadata }>
 ```
+
+All filter predicates are combined with **AND** semantics. Filters run before similarity scoring (pre-filter strategy), so selective filters meaningfully reduce compute.
 
 ### `db.delete(ids)`
 
@@ -174,9 +189,9 @@ cargo install wasm-pack
 git clone https://github.com/thealpha93/VecLite.git
 cd VecLite
 npm install
-npm run build       # wasm-pack + tsup
-npm test            # vitest
-npm run test:rust   # cargo test (25 unit tests)
+npm run build       # wasm-pack (with SIMD) + tsup
+npm test            # vitest (86 tests)
+npm run test:rust   # cargo test (48 unit tests)
 npm run bench       # VecLite vs pure-JS benchmark
 ```
 
@@ -204,7 +219,7 @@ The WASM binary is loaded on demand via `VecLite.init()` and cached by the brows
 
 ## Roadmap
 
-VecLite is actively maintained. Upcoming features for `v0.2` include **HNSW (Approximate Nearest Neighbor)** indexing, metadata filter operators (`$gte`, `$in`), and Web Worker support.
+VecLite is actively maintained. `v0.2` shipped SIMD-accelerated cosine similarity and operator-based metadata filtering (`$gte`, `$lte`, `$in`, `$ne`). Upcoming work for `v0.3` includes **HNSW approximate nearest neighbour** indexing, L2/dot-product distance metrics, and chunked persistence for very large datasets.
 
 Check out the full [ROADMAP.md](./ROADMAP.md) to see what's planned and how you can contribute!
 

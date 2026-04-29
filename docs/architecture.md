@@ -23,9 +23,9 @@ graph TD
     subgraph RUST [Rust / WASM core]
         direction LR
         Index["<b>index.rs</b><br>FlatIndex<br>upsert / delete"]
-        Sim["<b>similarity.rs</b><br>cosine similarity<br>f32 • top-k"]
-        Filt["<b>filter.rs</b><br>exact match<br>pre-filter"]
-        RTypes["<b>types.rs</b><br>VectorEntry<br>Metadata"]
+        Sim["<b>similarity.rs</b><br>cosine similarity<br>f32 • SIMD • top-k"]
+        Filt["<b>filter.rs</b><br>exact match + operators<br>$gte $lte $in $ne • pre-filter"]
+        RTypes["<b>types.rs</b><br>VectorEntry<br>FilterValue"]
     end
 
     DB[(IndexedDB)]
@@ -53,7 +53,8 @@ WebAssembly boundary crossings typically carry overhead. To achieve our fast ben
 ### 3. Rust/WASM Core
 The core engine is built natively in Rust. It does **pure computation only**. It is responsible for:
 - **High-Performance Memory:** Leveraging contiguous `f32` float layout in WASM linear memory bypassing standard V8 JavaScript garbage collector performance degradation.
-- **Algorithms:** For `v0.1`, the core implements a Brute-force exact-match flat index using cosine similarities. All metadata filtering happens in a pre-filtering pipeline step prior to doing heavy dot-product calculations.
+- **Algorithms:** The core implements a brute-force flat index with cosine similarity. Metadata filtering (exact match and operators — `$gte`, `$lte`, `$in`, `$ne`) runs as a pre-filter step before similarity scoring. Selective filters meaningfully reduce compute.
+- **SIMD:** Cosine similarity uses explicit `core::arch::wasm32` f32x4 intrinsics when compiled with the `simd` Cargo feature. A scalar fallback is always available. The `simd128` WebAssembly target feature is enabled unconditionally for all wasm32 builds, which also enables compiler auto-vectorisation on the scalar path.
 - **Deterministic state:** There are no async operations or hidden browser API calls occurring inside the Rust code.
 
 ## Why this Architecture?

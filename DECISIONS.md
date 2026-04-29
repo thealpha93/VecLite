@@ -139,30 +139,41 @@ Do not relitigate these without explicit human approval.
 - Faster when filter is selective — avoids computing similarity on irrelevant vectors
 - Simpler to reason about and test
 - Post-filter risks returning fewer than topK results when filter is narrow
+- v0.2 benchmarks confirm: $in at 25% selectivity is 1.37× faster than unfiltered baseline
 
 **Alternatives considered:**
 - Post-filter — better recall in edge cases, but wasteful and confusing
 - Hybrid — unnecessary complexity for v0.1 exact-match filtering
 
-**Status:** Locked. Revisit if filter operators are added in v0.2.
+**Status:** Locked.
 
 ---
 
-## ADR-009: Exact match metadata filtering only in v0.1
+## ADR-009: Exact match metadata filtering only in v0.1; operators added in v0.2
 
-**Decision:** v0.1 supports exact match filters only — { key: value }.
+**Decision:** v0.1 supports exact match filters only. v0.2 adds operator predicates.
 
-**Rationale:**
-- Covers the most common use case (filter by category, type, tag)
-- Keeps the Rust filter implementation simple and correct
-- Operator support ($gte, $lte, $in) adds significant complexity
-- Ship simple, validate demand, add operators in v0.2
+**v0.1 filter shape:** `{ key: value }` — exact match, AND across keys.
 
-**Alternatives considered:**
-- Full operator support from day one — too complex for v0.1
-- No filtering — leaves a gap that forces workarounds immediately
+**v0.2 filter shape:** each key maps to either a plain value (exact match, backwards
+compatible) or an operator object:
+```json
+{ "year": { "$gte": 2020 }, "category": { "$in": ["science", "tech"] }, "status": { "$ne": "archived" } }
+```
 
-**Status:** Locked. Operators ($gte, $lte, $in, $ne) deferred to v0.2.
+**Operators supported:** `$gte`, `$lte` (numbers only — return false for other types),
+`$in` (array membership via PartialEq), `$ne` (not equal, any MetadataValue).
+
+**Multiple operators on the same key** — AND semantics (all must hold).
+
+**Representation in Rust:** `FilterValue` is an untagged serde enum:
+- `Exact(MetadataValue)` — matches primitives (bool, number, string) first
+- `Operator(FilterOperator)` — matches objects, all fields Optional
+
+**TypeScript gatekeeper:** `validateFilter` in `validator.ts` rejects unknown operator
+keys, wrong value types, and empty operator objects before the WASM boundary.
+
+**Status:** Locked. Next filter additions deferred to v0.3+.
 
 ---
 
@@ -235,14 +246,41 @@ interface StorageAdapter {
 
 ---
 
-## What's deferred — do not implement in v0.1
+## ADR-013: SIMD optimisation via wasm32 intrinsics, gated by Cargo feature
+
+**Decision:** SIMD-accelerated cosine similarity is compiled only when `features = ["simd"]`
+is passed to wasm-pack, and only on `wasm32` targets.
+
+**Implementation:**
+- `cosine_similarity_scalar` — always compiled, used as reference and fallback
+- `cosine_similarity_simd` — `core::arch::wasm32` f32x4 intrinsics, 4-lane loop with
+  scalar tail for lengths not divisible by 4; gated on `#[cfg(all(target_arch = "wasm32", feature = "simd"))]`
+- Public `cosine_similarity` dispatches at compile time — no runtime branch
+- `rust/.cargo/config.toml` sets `target-feature=+simd128` for `wasm32-unknown-unknown`,
+  which also lets the compiler auto-vectorise the scalar loop when simd feature is off
+
+**`build:wasm` script** passes `--features simd` — SIMD is the default shipped build.
+
+**cargo test** (native target) is unaffected by `.cargo/config.toml`; all 48 tests run
+the scalar path. The test `simd_and_scalar_paths_return_identical_results` calls both
+`cosine_similarity` (SIMD on wasm32, scalar on native) and `cosine_similarity_scalar`
+and asserts they agree within 1e-5.
+
+**Alternatives considered:**
+- `std::simd` portable SIMD — requires nightly toolchain; rejected
+- External crate (`wide`, `packed_simd2`) — adds dependency for one function; rejected
+
+**Status:** Locked.
+
+---
+
+## What's deferred — do not implement without explicit approval
 
 - HNSW index
 - L2 / dot product distance metrics
-- Metadata filter operators ($gte, $lte, $in, $ne)
+- Filter operators beyond $gte, $lte, $in, $ne (e.g. $exists, $regex)
 - Node.js support
 - React Native support
 - Web Worker support
-- SIMD optimisation
 - Base64 inlined WASM option
 - Repository pattern / domain-aware storage
