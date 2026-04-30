@@ -9,7 +9,7 @@ Search 10k, 50k, 100k+ vectors in the browser. No server. No API keys.
 
 ## Why
 
-Pure JS vector search tops out around 1k–5k vectors before latency becomes noticeable. VecLite uses a Rust/WASM core for brute-force cosine similarity — **5–20× faster than pure JS** at 10k+ vectors, with no GC pauses and direct SIMD-compatible memory layout.
+Pure JS vector search tops out around 1k–5k vectors before latency becomes noticeable. VecLite uses a Rust/WASM core for brute-force cosine similarity — **~4× faster than pure JS** at 10k+ vectors, with no GC pauses and direct SIMD-compatible memory layout.
 
 | Library | Runtime | Target scale | Algorithm |
 |---|---|---|---|
@@ -79,8 +79,13 @@ const db = new VecLite({
   dimensions: 1536,          // required — must match your embedding model
   storage: new MyAdapter(),  // optional — defaults to IndexedDBAdapter
   maxVectors: 100_000,       // optional — throws before exceeding this count
+  metric: 'cosine',          // optional — 'cosine' (default) | 'l2' | 'dot'
+  indexType: 'flat',         // optional — 'flat' (default) | 'hnsw'
+  efConstruction: 200,       // optional — HNSW build quality (default: 200, ignored for flat)
 })
 ```
+
+**Index type guidance:** The flat index (default) is recommended for typical embedding dimensions (dim ≥ 512). At standard embedding dimensions like 1536, flat is consistently faster than HNSW at all practical browser scales — graph traversal overhead outweighs the candidate-reduction benefit. HNSW is only beneficial at low dimensions (< 128) with very large vector counts and infrequent writes. See [DECISIONS.md](./DECISIONS.md#adr-019) for benchmark data.
 
 ### `db.upsert(entries)`
 
@@ -200,21 +205,28 @@ npm run bench       # VecLite vs pure-JS benchmark
 Run `npm run bench` to compare VecLite against a pure-JS Float32Array implementation.
 The following benchmarks were measured using 1536-dimensional vectors (standard for most OpenAI models) on an Apple M-series chip with `topK=10`:
 
-| Dataset              | VecLite (v0.2) | Pure JS   | Speedup |
-|----------------------|----------------|-----------|---------|
-| 10k vectors, dim=1536 | 9.1ms         | 33.3ms    | 3.7x    |
-| 50k vectors, dim=1536 | 46ms          | 183ms     | 4.0x    |
-| 100k vectors, dim=1536| 85.5ms        | 343ms     | 4.0x    |
+| Dataset               | VecLite (v0.3) | Pure JS   | Speedup |
+|-----------------------|----------------|-----------|---------|
+| 10k vectors, dim=1536 | 40ms           | 152ms     | 3.8x    |
+| 50k vectors, dim=1536 | 200ms          | 778ms     | 3.9x    |
+| 100k vectors, dim=1536| 400ms          | 1,576ms   | 3.9x    |
 
-Filtered search (10k vectors, dim=1536):
-| Filter               | Mean   | vs unfiltered |
-|----------------------|--------|---------------|
-| $gte (~50% match)    | 4.6ms  | 1.8x faster   |
-| $in  (~25% match)    | 2.5ms  | 3.3x faster   |
+Filtered search (10k vectors, dim=1536, flat index):
+| Filter                | Mean   | vs unfiltered |
+|-----------------------|--------|---------------|
+| $gte (~50% selectivity) | 10ms | 3.9x faster   |
+| $in  (~25% selectivity) | 3ms  | 12x faster    |
+
+HNSW vs flat index (dim=1536, cosine, topK=10):
+| Scale       | Flat   | HNSW ef=200 | Winner          |
+|-------------|--------|-------------|-----------------|
+| 1k vectors  | 0.83ms | 0.95ms      | flat 1.1x faster |
+| 5k vectors  | 4.1ms  | 4.4ms       | flat 1.1x faster |
+| 10k vectors | 8.2ms  | 8.8ms       | flat 1.1x faster |
+
+At dim=1536, flat search outperforms HNSW at every scale. HNSW upsert is ~70x slower and delete (graph rebuild) is ~11,600x slower. Use the flat index (default) unless you have a specific reason for HNSW.
 
 Benchmarks run in Vitest with Rust/WASM compiled with SIMD enabled.
-
-The performance gap scales as dataset sizes increase thanks to WASM's highly optimized, contiguous `f32` memory layout circumventing V8 JavaScript runtime garbage collection pauses.
 
 ## Bundle size
 
@@ -227,7 +239,7 @@ The WASM binary is loaded on demand via `VecLite.init()` and cached by the brows
 
 ## Roadmap
 
-VecLite is actively maintained. `v0.2` shipped SIMD-accelerated cosine similarity and operator-based metadata filtering (`$gte`, `$lte`, `$in`, `$ne`). Upcoming work for `v0.3` includes **HNSW approximate nearest neighbour** indexing, L2/dot-product distance metrics, and chunked persistence for very large datasets.
+VecLite is actively maintained. `v0.3` shipped HNSW indexing, L2/dot-product distance metrics, and 68 Rust + 100 TypeScript tests. Upcoming `v0.4` work focuses on **chunked persistence** — a binary format replacing the current single JSON blob, with a migration path from v0.1/v0.2/v0.3 snapshots.
 
 Check out the full [ROADMAP.md](./ROADMAP.md) to see what's planned and how you can contribute!
 

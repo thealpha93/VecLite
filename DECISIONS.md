@@ -355,6 +355,33 @@ and asserts they agree within 1e-5.
 
 ---
 
+## ADR-019: HNSW not recommended for high-dimensional embeddings
+
+**Decision:** The flat index (default) is recommended for all practical browser use cases. HNSW is available as an opt-in but should not be presented as a performance upgrade. It is only beneficial at low dimensions (< 128) with very large, largely static datasets.
+
+**Evidence — benchmarks on Apple M-series, dim=1536, topK=10:**
+
+| Scale | Flat cosine | HNSW cosine ef=200 | Winner |
+|---|---|---|---|
+| 1,000 vectors | 0.83ms | 0.95ms | flat 1.14× faster |
+| 5,000 vectors | 4.1ms | 4.4ms | flat 1.08× faster |
+| 10,000 vectors | 8.2ms | 8.8ms | flat 1.07× faster |
+
+Upsert throughput (dim=128, 500 vectors): flat is **70× faster** than HNSW ef=200.
+Delete cost (1,000-vector base, dim=1536): flat is **11,600× faster** — HNSW triggers full graph rebuild.
+
+**Rationale:**
+- At dim=1536, each hop in the HNSW graph traverses a 1536-dimensional space, and neighbourhood structure provides weak directional signal — graph overhead exceeds the savings from reduced candidate count.
+- HNSW's sublinear search advantage only materialises when vector count is very large (> 100k) AND dimensions are low (< 128), where graph hops carry strong directional guidance.
+- At the browser-scale targets of this library (10k–100k vectors, OpenAI/Cohere embeddings at dim=1536), brute-force SIMD is faster than approximate graph search in every tested configuration.
+- Upsert and delete costs are prohibitive for typical workloads with any write activity.
+
+**HNSW remains in the codebase** for users with specific requirements (pre-computed low-dimensional embeddings, read-only workloads). It is not the recommended default.
+
+**Status:** Locked.
+
+---
+
 ## What's deferred — do not implement without explicit approval
 
 **Planned for v0.4 (storage):**
