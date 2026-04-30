@@ -48,3 +48,20 @@ pub struct SearchResult {
     pub score: f32,
     pub metadata: Metadata,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Metric {
+    Cosine,
+    L2,
+    Dot,
+}
+
+impl Metric {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "l2" => Metric::L2,
+            "dot" => Metric::Dot,
+            _ => Metric::Cosine,
+        }
+    }
+}

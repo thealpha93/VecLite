@@ -3,10 +3,16 @@ import type { StorageAdapter } from './adapters/adapter.js'
 export type MetadataValue = string | number | boolean
 export type Metadata = Record<string, MetadataValue>
 
+export type Metric = 'cosine' | 'l2' | 'dot'
+export type IndexType = 'flat' | 'hnsw'
+
 export interface VecLiteConfig {
   dimensions: number
   storage?: StorageAdapter
   maxVectors?: number
+  metric?: Metric
+  indexType?: IndexType
+  efConstruction?: number
 }
 
 export interface VectorEntry {

@@ -1,5 +1,17 @@
 use wasm_bindgen::prelude::*;
 
+pub fn l2_distance(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(x, y)| (x - y).powi(2)).sum::<f32>().sqrt()
+}
+
+pub fn l2_score(distance: f32) -> f32 {
+    1.0 / (1.0 + distance)
+}
+
+pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
+}
+
 /// Scalar cosine similarity — always compiled, used as fallback and reference.
 /// Dead-code warning suppressed: this function is the test reference on wasm32+simd.
 #[allow(dead_code)]
@@ -166,5 +178,45 @@ mod tests {
             (dispatched - scalar).abs() < 1e-5,
             "SIMD path {dispatched} diverged from scalar {scalar}"
         );
+    }
+
+    #[test]
+    fn l2_distance_identical_vectors_returns_zero() {
+        let a = [1.0_f32, 2.0, 3.0];
+        assert!((l2_distance(&a, &a)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn l2_distance_known_value() {
+        // distance between [0,0] and [3,4] = 5
+        let a = [0.0_f32, 0.0];
+        let b = [3.0_f32, 4.0];
+        assert!((l2_distance(&a, &b) - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn l2_score_zero_distance_returns_one() {
+        assert!((l2_score(0.0) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn l2_score_decreases_with_distance() {
+        assert!(l2_score(1.0) < l2_score(0.0));
+        assert!(l2_score(10.0) < l2_score(1.0));
+    }
+
+    #[test]
+    fn dot_product_orthogonal_returns_zero() {
+        let a = [1.0_f32, 0.0];
+        let b = [0.0_f32, 1.0];
+        assert!(dot_product(&a, &b).abs() < 1e-6);
+    }
+
+    #[test]
+    fn dot_product_known_value() {
+        let a = [1.0_f32, 2.0, 3.0];
+        let b = [4.0_f32, 5.0, 6.0];
+        // 1*4 + 2*5 + 3*6 = 4 + 10 + 18 = 32
+        assert!((dot_product(&a, &b) - 32.0).abs() < 1e-6);
     }
 }

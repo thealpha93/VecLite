@@ -11,6 +11,8 @@ export type {
   MetadataValue,
   FilterOperator,
   FilterValue,
+  Metric,
+  IndexType,
 } from './types.js'
 export {
   VecLiteDimensionError,

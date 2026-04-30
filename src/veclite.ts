@@ -12,9 +12,9 @@ import {
 import { sanitizeMetadata, validateFilter, validateVector } from './validator.js'
 import { flattenVectors, vectorToFloat32Array } from './utils.js'
 
-// Minimal interface matching the wasm-pack generated FlatIndex class.
+// Minimal shared interface matching both wasm-pack generated index classes.
 // The full types are in src/wasm/veclite.d.ts after running `npm run build:wasm`.
-interface WasmFlatIndex {
+interface WasmIndex {
   upsert(ids_json: string, flat_vectors: Float32Array, metadata_json: string): void
   search(query: Float32Array, top_k: number, filter_json: string): string
   delete(ids_json: string): void
@@ -28,14 +28,15 @@ type WasmInput = string | URL | ArrayBuffer | Uint8Array
 
 type WasmModule = {
   default: (input?: { module_or_path: WasmInput } | WasmInput) => Promise<unknown>
-  FlatIndex: new (dimensions: number) => WasmFlatIndex
+  FlatIndex: new (dimensions: number, metric: string) => WasmIndex
+  HnswIndex: new (dimensions: number, metric: string, ef_construction: number) => WasmIndex
 }
 
 let wasm: WasmModule | null = null
 
 export class VecLite {
   private static wasmReady = false
-  private index: WasmFlatIndex
+  private index: WasmIndex
   private storage: StorageAdapter
   private readonly dimensions: number
   private readonly maxVectors: number | undefined
@@ -54,7 +55,12 @@ export class VecLite {
     this.dimensions = config.dimensions
     this.maxVectors = config.maxVectors
     this.storage = config.storage ?? new IndexedDBAdapter()
-    this.index = new wasm.FlatIndex(config.dimensions)
+    const metric = config.metric ?? 'cosine'
+    if ((config.indexType ?? 'flat') === 'hnsw') {
+      this.index = new wasm.HnswIndex(config.dimensions, metric, config.efConstruction ?? 200)
+    } else {
+      this.index = new wasm.FlatIndex(config.dimensions, metric)
+    }
   }
 
   upsert(entries: VectorEntry[]): void {

@@ -469,3 +469,190 @@ describe('filter operators (v0.2)', () => {
     ).toThrow(VecLiteValidationError)
   })
 })
+
+describe('distance metrics (v0.3)', () => {
+  it('flat l2 — nearest by Euclidean distance wins', () => {
+    const db = new VecLite({ dimensions: 3, storage: new MemoryAdapter(), metric: 'l2' })
+    // a is closer to [1,0,0] by L2 than b
+    db.upsert([
+      { id: 'a', vector: [0.9, 0.1, 0.0] },
+      { id: 'b', vector: [0.0, 1.0, 0.0] },
+    ])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    expect(results[0].id).toBe('a')
+  })
+
+  it('flat l2 — score is 1/(1+distance), identical vector scores 1', () => {
+    const db = new VecLite({ dimensions: 3, storage: new MemoryAdapter(), metric: 'l2' })
+    db.upsert([{ id: 'a', vector: [1, 0, 0] }])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    expect(results[0].score).toBeCloseTo(1.0, 5)
+  })
+
+  it('flat dot — highest dot product wins', () => {
+    const db = new VecLite({ dimensions: 3, storage: new MemoryAdapter(), metric: 'dot' })
+    db.upsert([
+      { id: 'a', vector: [2, 0, 0] },
+      { id: 'b', vector: [0.5, 0, 0] },
+    ])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    expect(results[0].id).toBe('a')
+  })
+
+  it('flat dot — score equals raw dot product', () => {
+    const db = new VecLite({ dimensions: 3, storage: new MemoryAdapter(), metric: 'dot' })
+    db.upsert([{ id: 'a', vector: [0.6, 0.8, 0] }])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    // dot([1,0,0], [0.6,0.8,0]) = 0.6
+    expect(results[0].score).toBeCloseTo(0.6, 5)
+  })
+
+  it('flat unknown metric defaults to cosine', () => {
+    const db = new VecLite({
+      dimensions: 3,
+      storage: new MemoryAdapter(),
+      metric: 'cosine',
+    })
+    db.upsert([{ id: 'a', vector: [1, 0, 0] }])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    expect(results[0].score).toBeCloseTo(1.0, 5)
+  })
+})
+
+describe('HNSW index (v0.3)', () => {
+  function makeHnsw(metric: 'cosine' | 'l2' | 'dot' = 'cosine') {
+    return new VecLite({
+      dimensions: 3,
+      storage: new MemoryAdapter(),
+      indexType: 'hnsw',
+      metric,
+      efConstruction: 100,
+    })
+  }
+
+  it('upserted vector is found — cosine', () => {
+    const db = makeHnsw('cosine')
+    db.upsert([{ id: 'a', vector: [1, 0, 0] }])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe('a')
+    expect(results[0].score).toBeCloseTo(1.0, 4)
+  })
+
+  it('upserted vector is found — l2', () => {
+    const db = makeHnsw('l2')
+    db.upsert([
+      { id: 'a', vector: [0.9, 0.1, 0.0] },
+      { id: 'b', vector: [0.0, 1.0, 0.0] },
+    ])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    expect(results[0].id).toBe('a')
+  })
+
+  it('upserted vector is found — dot', () => {
+    const db = makeHnsw('dot')
+    db.upsert([
+      { id: 'a', vector: [0.9, 0, 0] },
+      { id: 'b', vector: [0.1, 0, 0] },
+    ])
+    const results = db.search({ vector: [1, 0, 0], topK: 1 })
+    expect(results[0].id).toBe('a')
+  })
+
+  it('topK limits results', () => {
+    const db = makeHnsw()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0] },
+      { id: 'b', vector: [0, 1, 0] },
+      { id: 'c', vector: [0, 0, 1] },
+    ])
+    expect(db.search({ vector: [1, 0, 0], topK: 2 })).toHaveLength(2)
+  })
+
+  it('delete removes entry from results', () => {
+    const db = makeHnsw()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0] },
+      { id: 'b', vector: [0, 1, 0] },
+    ])
+    db.delete(['a'])
+    expect(db.size).toBe(1)
+    const results = db.search({ vector: [1, 0, 0], topK: 5 })
+    expect(results.every((r) => r.id !== 'a')).toBe(true)
+  })
+
+  it('clear empties the index', () => {
+    const db = makeHnsw()
+    db.upsert([{ id: 'a', vector: [1, 0, 0] }])
+    db.clear()
+    expect(db.size).toBe(0)
+    expect(db.search({ vector: [1, 0, 0], topK: 5 })).toHaveLength(0)
+  })
+
+  it('post-filter returns only matching entries', () => {
+    const db = makeHnsw()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0], metadata: { cat: 'science' } },
+      { id: 'b', vector: [1, 0, 0], metadata: { cat: 'math' } },
+    ])
+    const results = db.search({ vector: [1, 0, 0], topK: 10, filter: { cat: 'science' } })
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe('a')
+  })
+
+  it('save + load round-trips HNSW entries through MemoryAdapter', async () => {
+    const adapter = new MemoryAdapter()
+    const db1 = new VecLite({
+      dimensions: 3,
+      storage: adapter,
+      indexType: 'hnsw',
+      efConstruction: 100,
+    })
+    db1.upsert([
+      { id: 'a', vector: [1, 0, 0], metadata: { cat: 'science' } },
+      { id: 'b', vector: [0, 1, 0] },
+    ])
+    await db1.save()
+
+    const db2 = new VecLite({
+      dimensions: 3,
+      storage: adapter,
+      indexType: 'hnsw',
+      efConstruction: 100,
+    })
+    await db2.load()
+    expect(db2.size).toBe(2)
+    const results = db2.search({ vector: [1, 0, 0], topK: 1 })
+    expect(results[0].id).toBe('a')
+  })
+
+  it('incremental append — two separate upserts with new IDs both searchable', () => {
+    const db = makeHnsw()
+    db.upsert([
+      { id: 'a', vector: [1, 0, 0] },
+      { id: 'b', vector: [0, 1, 0] },
+    ])
+    db.upsert([
+      { id: 'c', vector: [0, 0, 1] },
+      { id: 'd', vector: [1, 1, 0] },
+    ])
+    expect(db.size).toBe(4)
+    const results = db.search({ vector: [1, 0, 0], topK: 4 })
+    const ids = results.map((r) => r.id).sort()
+    expect(ids).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('flat and HNSW return same top-1 for cosine on orthogonal vectors', () => {
+    const flat = make(3)
+    const hnsw = makeHnsw('cosine')
+    const entries = [
+      { id: 'a', vector: [1, 0, 0] as number[] },
+      { id: 'b', vector: [0, 1, 0] as number[] },
+      { id: 'c', vector: [0, 0, 1] as number[] },
+    ]
+    flat.upsert(entries)
+    hnsw.upsert(entries)
+    const query = { vector: [1, 0, 0], topK: 1 }
+    expect(flat.search(query)[0].id).toBe(hnsw.search(query)[0].id)
+  })
+})

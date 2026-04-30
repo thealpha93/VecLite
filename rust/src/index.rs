@@ -1,21 +1,23 @@
 use crate::filter::{matches_filter, Filter};
-use crate::similarity::cosine_similarity;
-use crate::types::{Metadata, SearchResult, VectorEntry};
+use crate::similarity::{cosine_similarity, dot_product, l2_distance, l2_score};
+use crate::types::{Metadata, Metric, SearchResult, VectorEntry};
 use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct FlatIndex {
     dimensions: usize,
+    metric: Metric,
     entries: Vec<VectorEntry>,
 }
 
 #[wasm_bindgen]
 impl FlatIndex {
     #[wasm_bindgen(constructor)]
-    pub fn new(dimensions: usize) -> FlatIndex {
+    pub fn new(dimensions: usize, metric_str: &str) -> FlatIndex {
         FlatIndex {
             dimensions,
+            metric: Metric::from_str(metric_str),
             entries: Vec::new(),
         }
     }
@@ -53,7 +55,14 @@ impl FlatIndex {
             .filter(|(_, entry)| {
                 filter.as_ref().map_or(true, |f| matches_filter(&entry.metadata, f))
             })
-            .map(|(i, entry)| (cosine_similarity(query, &entry.vector), i))
+            .map(|(i, entry)| {
+                let score = match self.metric {
+                    Metric::Cosine => cosine_similarity(query, &entry.vector),
+                    Metric::L2 => l2_score(l2_distance(query, &entry.vector)),
+                    Metric::Dot => dot_product(query, &entry.vector),
+                };
+                (score, i)
+            })
             .collect();
 
         scored.sort_unstable_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -100,7 +109,11 @@ mod tests {
     use super::*;
 
     fn idx() -> FlatIndex {
-        FlatIndex::new(3)
+        FlatIndex::new(3, "cosine")
+    }
+
+    fn idx_metric(metric: &str) -> FlatIndex {
+        FlatIndex::new(3, metric)
     }
 
     #[test]
@@ -215,5 +228,39 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0]["id"], "a");
         assert_eq!(entries[0]["metadata"]["tag"], "x");
+    }
+
+    #[test]
+    fn l2_metric_top_result_is_nearest_by_euclidean_distance() {
+        let mut i = idx_metric("l2");
+        // b is closer to query [1,0,0] by L2 than c
+        i.upsert(
+            r#"["a","b","c"]"#,
+            &[0.9, 0.1, 0.0, 0.95, 0.05, 0.0, 0.0, 1.0, 0.0],
+            r#"[{},{},{}]"#,
+        );
+        let res: Vec<serde_json::Value> =
+            serde_json::from_str(&i.search(&[1.0, 0.0, 0.0], 1, "null")).unwrap();
+        assert_eq!(res[0]["id"], "b");
+    }
+
+    #[test]
+    fn dot_metric_top_result_is_highest_dot_product() {
+        let mut i = idx_metric("dot");
+        // b has the largest dot product with query [1,0,0]
+        i.upsert(
+            r#"["a","b","c"]"#,
+            &[0.5, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            r#"[{},{},{}]"#,
+        );
+        let res: Vec<serde_json::Value> =
+            serde_json::from_str(&i.search(&[1.0, 0.0, 0.0], 1, "null")).unwrap();
+        assert_eq!(res[0]["id"], "b");
+    }
+
+    #[test]
+    fn unknown_metric_str_defaults_to_cosine() {
+        let i = FlatIndex::new(3, "invalid");
+        assert_eq!(i.metric, Metric::Cosine);
     }
 }

@@ -2,7 +2,7 @@
 
 This document outlines the planned future development for VecLite. This is a living document and priorities may shift based on community feedback.
 
-## Current Status: v0.2.0
+## Current Status: v0.3.0
 *Status: Released*
 
 ---
@@ -26,14 +26,14 @@ The initial release focuses on correctness, stability, and proving the Rust/WASM
 
 ---
 
-## Planned: v0.3.0
+## Released: v0.3.0
 *Focus: Algorithm — scale the search core*
 
-HNSW and distance metrics are coupled: HNSW internally needs a distance function, so the metric abstraction gets designed here regardless. Ship the full algorithm story together.
+HNSW and distance metrics are coupled: HNSW internally needs a distance function, so the metric abstraction gets designed here. Shipped the full algorithm story together.
 
 ### Core Algorithms & Indexing
-- **HNSW Index (Approximate Nearest Neighbor):** Hierarchical Navigable Small World graphs for sub-linear search beyond 100k vectors. Opt-in alongside the flat index — existing users unaffected. Recall tested against the flat index as ground truth before shipping.
-- **Additional Distance Metrics:** L2 (Euclidean) distance and Dot Product alongside Cosine Similarity. Metric specified at construction time; applies to both flat and HNSW index paths.
+- [x] **HNSW Index (Approximate Nearest Neighbor):** Hierarchical Navigable Small World graphs for sub-linear search beyond 100k vectors. Opt-in via `indexType: 'hnsw'` alongside the flat index — existing users unaffected. Uses `hnsw` crate (rust-cv), M=16, M0=32, deterministic `Pcg64` RNG. Post-filter strategy with oversample=10.
+- [x] **Additional Distance Metrics:** L2 (Euclidean) distance and Dot Product alongside Cosine Similarity. `metric` specified at construction time; applies to both flat and HNSW index paths. Rust test count: 68. TypeScript test count: 100.
 
 ---
 

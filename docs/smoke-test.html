@@ -4,29 +4,38 @@
   <meta charset="UTF-8">
   <title>VecLite smoke test</title>
   <style>
-    body { font-family: monospace; padding: 2rem; max-width: 640px; }
+    body { font-family: monospace; padding: 2rem; max-width: 720px; }
     .pass { color: green; }
     .fail { color: red; }
-    .step { margin: 0.5rem 0; }
+    .step { margin: 0.25rem 0; }
+    .section { margin-top: 1.5rem; font-weight: bold; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; }
     pre { background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; }
   </style>
 </head>
 <body>
-  <h1>VecLite browser smoke test</h1>
-  <p>Serves as the manual verification for the browser WASM init path (<code>VecLite.init()</code> with no arguments — uses <code>fetch</code> + <code>import.meta.url</code>).</p>
+  <h1>VecLite browser smoke test (v0.3)</h1>
+  <p>Manual verification for the browser WASM init path (<code>VecLite.init()</code> with no arguments — uses <code>fetch</code> + <code>import.meta.url</code>). Covers all v0.3 features.</p>
   <p><strong>To run:</strong> <code>npx serve . -p 3000</code> then open <a href="http://localhost:3000/docs/smoke-test.html">http://localhost:3000/docs/smoke-test.html</a></p>
   <hr>
   <div id="log"></div>
   <pre id="results">Running…</pre>
 
   <script type="module">
-    // Use absolute path so dist/ relative imports resolve correctly
     import { VecLite, MemoryAdapter } from '/dist/index.js'
 
     const log = document.getElementById('log')
     const out = document.getElementById('results')
+    let failCount = 0
+
+    function section(title) {
+      const div = document.createElement('div')
+      div.className = 'section'
+      div.textContent = title
+      log.appendChild(div)
+    }
 
     function step(msg, ok) {
+      if (ok === false) failCount++
       const div = document.createElement('div')
       div.className = `step ${ok === undefined ? '' : ok ? 'pass' : 'fail'}`
       div.textContent = `${ok === undefined ? '⏳' : ok ? '✓' : '✗'} ${msg}`
@@ -35,54 +44,150 @@
 
     async function run() {
       try {
-        // 1. Init — browser path: fetch veclite_bg.wasm relative to the chunk
+        // ── 1. WASM init ──────────────────────────────────────────────────────
+        section('1. WASM init')
         step('VecLite.init() — loading WASM via fetch…')
         const t0 = performance.now()
         await VecLite.init()
         const initMs = (performance.now() - t0).toFixed(1)
         step(`VecLite.init() completed in ${initMs}ms`, true)
 
-        // 2. Create index
-        const adapter = new MemoryAdapter()
-        const db = new VecLite({ dimensions: 4, storage: adapter })
-        step('new VecLite({ dimensions: 4 })', true)
+        // ── 2. Flat index — cosine (v0.1 baseline) ───────────────────────────
+        section('2. Flat index — cosine')
+        {
+          const db = new VecLite({ dimensions: 4, storage: new MemoryAdapter() })
+          db.upsert([
+            { id: 'cat',  vector: [1, 0, 0, 0], metadata: { animal: 'cat' } },
+            { id: 'dog',  vector: [0, 1, 0, 0], metadata: { animal: 'dog' } },
+            { id: 'cat2', vector: [0.9, 0.1, 0, 0], metadata: { animal: 'cat' } },
+          ])
+          step(`upsert 3 vectors → size=${db.size}`, db.size === 3)
 
-        // 3. Upsert
-        db.upsert([
-          { id: 'cat',  vector: [1, 0, 0, 0], metadata: { animal: 'cat' } },
-          { id: 'dog',  vector: [0, 1, 0, 0], metadata: { animal: 'dog' } },
-          { id: 'cat2', vector: [0.9, 0.1, 0, 0], metadata: { animal: 'cat' } },
-        ])
-        step(`upsert 3 vectors → db.size = ${db.size}`, db.size === 3)
+          const res = db.search({ vector: [1, 0, 0, 0], topK: 3 })
+          step(`search topK=3 → top="${res[0].id}" score=${res[0].score.toFixed(4)}`, res[0].id === 'cat')
 
-        // 4. Search without filter
-        const all = db.search({ vector: [1, 0, 0, 0], topK: 3 })
-        const allOk = all[0].id === 'cat' && all.length === 3
-        step(`search topK=3 — top result: "${all[0].id}" score=${all[0].score.toFixed(4)}`, allOk)
+          const filtered = db.search({ vector: [1, 0, 0, 0], topK: 3, filter: { animal: 'cat' } })
+          step(`filter={animal:'cat'} → ${filtered.length} results`, filtered.length === 2 && filtered.every(r => r.metadata.animal === 'cat'))
 
-        // 5. Search with filter
-        const filtered = db.search({ vector: [1, 0, 0, 0], topK: 3, filter: { animal: 'cat' } })
-        const filterOk = filtered.length === 2 && filtered.every(r => r.metadata.animal === 'cat')
-        step(`search filter={animal:'cat'} → ${filtered.length} results`, filterOk)
+          db.delete(['cat2'])
+          step(`delete(['cat2']) → size=${db.size}`, db.size === 2)
+        }
 
-        // 6. Delete
-        db.delete(['cat2'])
-        step(`delete(['cat2']) → db.size = ${db.size}`, db.size === 2)
+        // ── 3. Flat index — L2 ───────────────────────────────────────────────
+        section('3. Flat index — L2')
+        {
+          const db = new VecLite({ dimensions: 3, metric: 'l2', storage: new MemoryAdapter() })
+          db.upsert([
+            { id: 'a', vector: [1, 0, 0] },
+            { id: 'b', vector: [0, 1, 0] },
+            { id: 'c', vector: [0.9, 0.1, 0] },
+          ])
+          const res = db.search({ vector: [1, 0, 0], topK: 1 })
+          step(`L2 top result is 'a' (nearest by L2) → "${res[0].id}"`, res[0].id === 'a')
+          step(`L2 score ≤ 1 (1/(1+dist)) → ${res[0].score.toFixed(4)}`, res[0].score <= 1 && res[0].score > 0)
+        }
 
-        // 7. Save + Load
-        await db.save()
-        const db2 = new VecLite({ dimensions: 4, storage: adapter })
-        step('save() succeeded', true)
+        // ── 4. Flat index — dot product ──────────────────────────────────────
+        section('4. Flat index — dot product')
+        {
+          const db = new VecLite({ dimensions: 3, metric: 'dot', storage: new MemoryAdapter() })
+          db.upsert([
+            { id: 'high', vector: [2, 0, 0] },
+            { id: 'low',  vector: [0.5, 0, 0] },
+            { id: 'zero', vector: [0, 1, 0] },
+          ])
+          const res = db.search({ vector: [1, 0, 0], topK: 3 })
+          step(`dot top result is 'high' (largest dot) → "${res[0].id}"`, res[0].id === 'high')
+          step(`dot last is 'zero' (orthogonal, dot=0) → "${res[2].id}"`, res[2].id === 'zero')
+        }
 
-        // 8. Summary
-        const allPassed = allOk && filterOk && db.size === 2
+        // ── 5. HNSW index — cosine ───────────────────────────────────────────
+        section('5. HNSW index — cosine')
+        {
+          const db = new VecLite({ dimensions: 4, indexType: 'hnsw', metric: 'cosine', efConstruction: 50, storage: new MemoryAdapter() })
+          db.upsert([
+            { id: 'cat',  vector: [1, 0, 0, 0], metadata: { animal: 'cat', score: 10 } },
+            { id: 'dog',  vector: [0, 1, 0, 0], metadata: { animal: 'dog', score: 5 } },
+            { id: 'cat2', vector: [0.9, 0.1, 0, 0], metadata: { animal: 'cat', score: 8 } },
+          ])
+          step(`HNSW upsert 3 vectors → size=${db.size}`, db.size === 3)
+
+          const res = db.search({ vector: [1, 0, 0, 0], topK: 1 })
+          step(`HNSW search top result → "${res[0].id}"`, res[0].id === 'cat')
+
+          const filtered = db.search({ vector: [1, 0, 0, 0], topK: 3, filter: { animal: 'cat' } })
+          step(`HNSW filter={animal:'cat'} → ${filtered.length} results`, filtered.length === 2 && filtered.every(r => r.metadata.animal === 'cat'))
+
+          const opFilter = db.search({ vector: [1, 0, 0, 0], topK: 3, filter: { score: { $gte: 9 } } })
+          step(`HNSW filter={score:{$gte:9}} → "${opFilter[0]?.id}"`, opFilter.length === 1 && opFilter[0].id === 'cat')
+
+          db.delete(['cat2'])
+          step(`HNSW delete(['cat2']) → size=${db.size}`, db.size === 2)
+          const afterDel = db.search({ vector: [1, 0, 0, 0], topK: 3 })
+          step(`HNSW search after delete → no cat2`, afterDel.every(r => r.id !== 'cat2'))
+
+          // Incremental append (two separate upsert calls, all-new IDs)
+          db.upsert([{ id: 'bird', vector: [0, 0, 1, 0], metadata: { animal: 'bird', score: 3 } }])
+          step(`HNSW incremental append → size=${db.size}`, db.size === 3)
+          const bird = db.search({ vector: [0, 0, 1, 0], topK: 1 })
+          step(`HNSW incremental append searchable → "${bird[0].id}"`, bird[0].id === 'bird')
+        }
+
+        // ── 6. HNSW index — L2 ──────────────────────────────────────────────
+        section('6. HNSW index — L2')
+        {
+          const db = new VecLite({ dimensions: 3, indexType: 'hnsw', metric: 'l2', efConstruction: 50, storage: new MemoryAdapter() })
+          db.upsert([
+            { id: 'near', vector: [1, 0, 0] },
+            { id: 'far',  vector: [0, 1, 0] },
+          ])
+          const res = db.search({ vector: [1, 0, 0], topK: 1 })
+          step(`HNSW L2 top result is 'near' → "${res[0].id}"`, res[0].id === 'near')
+        }
+
+        // ── 7. HNSW index — dot product ──────────────────────────────────────
+        section('7. HNSW index — dot product')
+        {
+          const db = new VecLite({ dimensions: 3, indexType: 'hnsw', metric: 'dot', efConstruction: 50, storage: new MemoryAdapter() })
+          db.upsert([
+            { id: 'high', vector: [2, 0, 0] },
+            { id: 'low',  vector: [0.5, 0, 0] },
+            { id: 'zero', vector: [0, 1, 0] },
+          ])
+          const res = db.search({ vector: [1, 0, 0], topK: 1 })
+          step(`HNSW dot top result is 'high' → "${res[0].id}"`, res[0].id === 'high')
+        }
+
+        // ── 8. Persistence (save + load) ─────────────────────────────────────
+        section('8. Persistence (save + load)')
+        {
+          const adapter = new MemoryAdapter()
+          const db = new VecLite({ dimensions: 4, storage: adapter })
+          db.upsert([
+            { id: 'x', vector: [1, 0, 0, 0], metadata: { tag: 'persist' } },
+            { id: 'y', vector: [0, 1, 0, 0], metadata: { tag: 'persist' } },
+          ])
+          await db.save()
+          step('save() succeeded', true)
+
+          const db2 = new VecLite({ dimensions: 4, storage: adapter })
+          await db2.load()
+          step(`load() → size=${db2.size}`, db2.size === 2)
+
+          const res = db2.search({ vector: [1, 0, 0, 0], topK: 1 })
+          step(`search after load → "${res[0].id}"`, res[0].id === 'x')
+          step(`metadata preserved → tag="${res[0].metadata.tag}"`, res[0].metadata.tag === 'persist')
+        }
+
+        // ── Summary ───────────────────────────────────────────────────────────
+        const allPassed = failCount === 0
         out.textContent = allPassed
-          ? '✓ All checks passed — browser WASM init path works correctly.'
-          : '✗ Some checks failed — see log above.'
+          ? '✓ All checks passed — WASM init path + all v0.3 features verified.'
+          : `✗ ${failCount} check(s) failed — see log above.`
         out.style.color = allPassed ? 'green' : 'red'
 
       } catch (err) {
-        step(`ERROR: ${err.message}`, false)
+        step(`UNCAUGHT ERROR: ${err.message}`, false)
         out.textContent = `✗ ${err.stack}`
         out.style.color = 'red'
       }

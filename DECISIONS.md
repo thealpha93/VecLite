@@ -275,11 +275,91 @@ and asserts they agree within 1e-5.
 
 ---
 
+## ADR-014: HNSW via `hnsw` crate, M=16 fixed
+
+**Decision:** Use the `hnsw` crate (rust-cv 0.11.0) with M=16, M0=32 fixed at compile time.
+
+**Rationale:**
+- Only WASM-compatible HNSW crate (instant-distance and hnsw_rs use rayon → incompatible with wasm32-unknown-unknown)
+- M=16 is the standard default used by Pinecone, Weaviate, and hnswlib
+- Correct from-scratch implementation is ~800 lines; the crate gives recall-tested correctness
+- Users needing other M values can recompile from source (advanced use case)
+- `rand_pcg::Pcg64` used as deterministic RNG; seeded from default (zero) — sufficient for layer assignment quality
+
+**Alternatives considered:**
+- From-scratch HNSW with runtime M — correct but risky; silent recall degradation from any implementation bug
+- Other crates (instant-distance, hnsw_rs) — rejected due to rayon dependency (incompatible with wasm32)
+
+**Status:** Locked.
+
+---
+
+## ADR-015: Metric abstraction — string at WASM boundary, enum in Rust
+
+**Decision:** Metric is passed as a `&str` ("cosine" | "l2" | "dot") to WASM constructors and parsed to an internal `Metric` enum. TypeScript exposes `Metric = 'cosine' | 'l2' | 'dot'`.
+
+**Rationale:**
+- wasm-bindgen cannot export generic structs; a Rust trait-based metric would require wasm-bindgen generics or dynamic dispatch
+- String parameter keeps the WASM boundary simple and consistent with the existing JSON-string convention
+- `Metric::from_str` defaults to cosine for unknown values — safe fallback, no panic
+
+**Status:** Locked.
+
+---
+
+## ADR-016: HNSW post-filter with oversample=10; flat index keeps pre-filter
+
+**Decision:** HNSW search fetches `topK × 10` candidates from the graph, applies metadata filter post-hoc, returns top `topK`. Flat index retains pre-filter (unchanged from v0.2).
+
+**Rationale:**
+- Pre-filter requires knowing candidates before graph traversal — impossible in HNSW without re-architecting the graph
+- Oversample=10 balances recall vs wasted computation; at 25% selectivity this returns enough candidates
+- Flat index pre-filter is still exact and fast; no reason to change it
+
+**Limitation:** Narrow filters with selectivity < 1/oversample may return fewer than `topK` results. Increasing `efConstruction` helps but does not guarantee full topK under extreme filters.
+
+**Status:** Locked. Oversample factor may be revisited in v0.3+.
+
+---
+
+## ADR-017: HNSW distance metrics as u32 bit patterns; dot product uses cosine distance in graph
+
+**Decision:** `space::Metric::Unit = u32` for all three metrics. f32 distances are stored as their IEEE 754 bit pattern (positive f32 values preserve ordering under u32 reinterpretation). Dot product uses `1 - dot_product` as the graph distance (equivalent to cosine distance for unit vectors); actual dot product is recomputed from vectors at score-return time.
+
+**Rationale:**
+- `space::Metric` (hnsw 0.11 dependency) requires `Unit: Unsigned + Ord + Copy` — f32 does not satisfy this
+- IEEE 754 positive floats are monotonically ordered as u32 bit patterns — safe for non-negative distances
+- Cosine distance = 1 - cosine_similarity ∈ [0, 2]; L2 distance ≥ 0; both always non-negative ✓
+- Dot product "distance" can be negative for unnormalized vectors — using 1 - dot_product as graph distance matches cosine for unit vectors and degrades gracefully for non-unit vectors
+- Actual dot product score is recomputed from vectors at query time (one extra dot product per candidate) — exact, no information loss
+
+**Limitation:** Dot product metric in HNSW mode is optimized for L2-normalized (unit) vectors. Non-unit vectors will get approximately correct ANN results (graph finds angularly close vectors, which correlates with high dot product for normalized embeddings). For exact dot product with non-unit vectors, use the flat index.
+
+**Status:** Locked.
+
+---
+
+## ADR-018: HNSW delete = full graph rebuild (O(n log n))
+
+**Decision:** Deleting any entry from HNSW rebuilds the graph from scratch using the remaining entries.
+
+**Rationale:**
+- HNSW graphs have no incremental delete operation — neighbor pointers from deleted nodes remain in the graph
+- Lazy-delete (tombstoning) requires tracking deleted indices throughout search and complicates index / size semantics
+- At v0.3 scale (< 500k vectors), a rebuild triggered by delete is acceptable; it is not on the hot path
+- Upsert of an existing ID also triggers a rebuild (HNSW has no in-place update)
+
+**Limitation:** Frequent individual deletes on a large HNSW index are O(n log n) per delete. Batch deletes (delete N, one rebuild) are preferred. Incremental delete deferred to v0.4+.
+
+**Status:** Locked.
+
+---
+
 ## What's deferred — do not implement without explicit approval
 
-**Planned for v0.3 (algorithms):**
-- HNSW index
-- L2 / dot product distance metrics — metric abstraction designed here because HNSW needs it
+**Planned for v0.4 (storage):**
+- Chunked persistence — binary serialisation replacing the single JSON blob in save/load; versioned format with migration path from v0.1/v0.2/v0.3 JSON snapshot
+- Domain-aware storage API (evaluation) — decided after chunked persistence ships; may be unnecessary
 
 **Planned for v0.4 (storage):**
 - Chunked persistence — binary serialisation replacing the single JSON blob in save/load; versioned format with migration path from v0.1/v0.2 JSON snapshot
