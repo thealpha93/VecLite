@@ -5,7 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)**Client-side vector search that scales.**
 Rust/WASM powered — works where pure JS breaks down.
 
-Search 10k, 50k, 100k+ vectors in the browser. No server. No API keys.
+Client-side vector search that scales.
+Search 100k vectors in 400ms — entirely in the browser. No server. No API keys. No data leaves the device.
 
 ## Why
 

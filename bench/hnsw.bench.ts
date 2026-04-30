@@ -3,6 +3,7 @@
  *
  * Covers:
  *   1. HNSW vs Flat search latency at 1k / 5k / 10k vectors
+ *      + 50k / 100k when LARGE_SCALE=true (HNSW build takes 10–30 min at dim=1536)
  *   2. Cosine / L2 / Dot search latency on flat index (10k vectors)
  *   3. Cosine / L2 / Dot search latency on HNSW index (10k vectors)
  *   4. HNSW efConstruction tradeoff — search latency ef=50/100/200/500
@@ -11,6 +12,7 @@
  *
  * Run:  npm run bench
  * Override dims: DIM=128 npm run bench
+ * Large-scale crossover: LARGE_SCALE=true npm run bench
  */
 
 import { readFileSync } from 'fs'
@@ -23,6 +25,7 @@ const __dir = dirname(fileURLToPath(import.meta.url))
 
 const DIM = Number(process.env.DIM ?? 1536)
 const TOP_K = 10
+const LARGE_SCALE = process.env.LARGE_SCALE === 'true'
 const UPSERT_DIM = 128
 const UPSERT_COUNT = 500
 const DELETE_BASE = 1_000
@@ -53,10 +56,12 @@ function makeDb(indexType: 'flat' | 'hnsw', metric: string, dim: number, efConst
 // describe/bench are registered synchronously; closures capture the reference,
 // so the actual VecLite instances are resolved when benchmarks run (post-beforeAll).
 
-// Section 1: HNSW vs Flat at 1k / 5k / 10k
+// Section 1: HNSW vs Flat at 1k / 5k / 10k (+ 50k / 100k when LARGE_SCALE=true)
 let flat1k: VecLite, hnsw1k: VecLite, query1k: number[]
 let flat5k: VecLite, hnsw5k: VecLite, query5k: number[]
 let flat10k: VecLite, hnsw10k: VecLite, query10k: number[]
+let flat50k: VecLite, hnsw50k: VecLite, query50k: number[]
+let flat100k: VecLite, hnsw100k: VecLite, query100k: number[]
 
 // Section 2 & 3: Metrics — flat + HNSW, 10k vectors
 let cosFlat: VecLite, cosHnsw: VecLite, cosQuery: number[]
@@ -80,7 +85,7 @@ beforeAll(async () => {
   const wasmBytes = readFileSync(join(__dir, '../src/wasm/veclite_bg.wasm'))
   await VecLite.init(wasmBytes)
 
-  // 1. Search latency at three scales
+  // 1. Search latency — standard scales
   for (const [count, setFlat, setHnsw, setQuery] of [
     [1_000,  (v: VecLite) => { flat1k  = v }, (v: VecLite) => { hnsw1k  = v }, (q: number[]) => { query1k  = q }],
     [5_000,  (v: VecLite) => { flat5k  = v }, (v: VecLite) => { hnsw5k  = v }, (q: number[]) => { query5k  = q }],
@@ -91,6 +96,21 @@ beforeAll(async () => {
     const hnsw = makeDb('hnsw', 'cosine', DIM, 200)
     flat.upsert(entries); hnsw.upsert(entries)
     ;(setFlat as any)(flat); (setHnsw as any)(hnsw); (setQuery as any)(randomVec(DIM))
+  }
+
+  // 1b. Large-scale crossover — HNSW build at these sizes is slow (10–30 min)
+  if (LARGE_SCALE) {
+    for (const [count, setFlat, setHnsw, setQuery] of [
+      [50_000,  (v: VecLite) => { flat50k  = v }, (v: VecLite) => { hnsw50k  = v }, (q: number[]) => { query50k  = q }],
+      [100_000, (v: VecLite) => { flat100k = v }, (v: VecLite) => { hnsw100k = v }, (q: number[]) => { query100k = q }],
+    ] as const) {
+      console.log(`Building flat + HNSW index for ${(count as number).toLocaleString()} vectors...`)
+      const entries = makeEntries(count as number, DIM)
+      const flat = makeDb('flat', 'cosine', DIM)
+      const hnsw = makeDb('hnsw', 'cosine', DIM, 200)
+      flat.upsert(entries); hnsw.upsert(entries)
+      ;(setFlat as any)(flat); (setHnsw as any)(hnsw); (setQuery as any)(randomVec(DIM))
+    }
   }
 
   // 2 & 3. Metrics — 10k vectors
@@ -131,6 +151,18 @@ describe(`HNSW vs Flat · 10,000 vectors · dim=${DIM} · topK=${TOP_K}`, () => 
   bench('flat  cosine (exact)',       () => { flat10k.search({ vector: query10k, topK: TOP_K }) }, { time: 10_000 })
   bench('hnsw  cosine ef=200 (approx)', () => { hnsw10k.search({ vector: query10k, topK: TOP_K }) }, { time: 10_000 })
 })
+
+if (LARGE_SCALE) {
+  describe(`HNSW vs Flat · 50,000 vectors · dim=${DIM} · topK=${TOP_K}`, () => {
+    bench('flat  cosine (exact)',         () => { flat50k.search({ vector: query50k, topK: TOP_K }) }, { time: 10_000 })
+    bench('hnsw  cosine ef=200 (approx)', () => { hnsw50k.search({ vector: query50k, topK: TOP_K }) }, { time: 10_000 })
+  })
+
+  describe(`HNSW vs Flat · 100,000 vectors · dim=${DIM} · topK=${TOP_K}`, () => {
+    bench('flat  cosine (exact)',         () => { flat100k.search({ vector: query100k, topK: TOP_K }) }, { time: 10_000 })
+    bench('hnsw  cosine ef=200 (approx)', () => { hnsw100k.search({ vector: query100k, topK: TOP_K }) }, { time: 10_000 })
+  })
+}
 
 // ── 2. Metrics — flat index ───────────────────────────────────────────────────
 
