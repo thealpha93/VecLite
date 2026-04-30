@@ -5,8 +5,22 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)**Client-side vector search that scales.**
 Rust/WASM powered — works where pure JS breaks down.
 
-Client-side vector search that scales.
-Search 100k vectors in 400ms — entirely in the browser. No server. No API keys. No data leaves the device.
+**Client-side vector search that scales.**
+
+Search 100k vectors in 400ms — entirely in the browser.
+No server. No API keys. No data leaves the device.
+
+Built on a Rust/WASM core with SIMD — ~4x faster than pure JS 
+at production embedding dimensions. Exact results, pluggable 
+storage, MongoDB-style filter operators.
+
+## What can you build with this?
+
+- **Semantic document search** — search your notes, docs, or knowledge base entirely client-side
+- **Privacy-first RAG** — retrieval-augmented generation where user data never leaves the browser
+- **Offline-capable search** — semantic search that works without internet, via Service Workers
+- **In-browser recommendation** — personalised results computed locally, no backend required
+- **Developer tools** — AI-powered search in browser extensions or Electron apps
 
 ## Why
 
@@ -14,9 +28,10 @@ Pure JS vector search tops out around 1k–5k vectors before latency becomes not
 
 | Library | Runtime | Target scale | Algorithm |
 |---|---|---|---|
-| VecLite | Rust/WASM + SIMD | 10k–100k+ | Brute-force flat index |
+| VecLite | Rust/WASM + SIMD | 10k–100k+ | Brute-force flat index, HNSW |
 | Vectra | Pure JS | ≤5k | Brute-force, Node.js only |
 | client-vector-search | Pure JS | ~1k | Brute-force |
+| MeMemo | Pure JS | Large | ✅ | HNSW, brute-force | 
 
 ## Installation
 
@@ -240,7 +255,7 @@ The WASM binary is loaded on demand via `VecLite.init()` and cached by the brows
 
 ## Roadmap
 
-VecLite is actively maintained. `v0.3` shipped HNSW indexing, L2/dot-product distance metrics, and 68 Rust + 100 TypeScript tests. Upcoming `v0.4` work focuses on **chunked persistence** — a binary format replacing the current single JSON blob, with a migration path from v0.1/v0.2/v0.3 snapshots.
+VecLite is actively maintained. `v0.3` shipped HNSW indexing, L2/dot-product distance metrics, and 68 Rust + 100 TypeScript tests. Upcoming `v0.4` introduces **`veclite/rag`** — a batteries-included RAG pipeline. Bring a document, get semantic search. Chunking, local embeddings via transformers.js, and VecLite search under the hood. Zero config. No API keys. No data leaves the device.
 
 Check out the full [ROADMAP.md](./ROADMAP.md) to see what's planned and how you can contribute!
 

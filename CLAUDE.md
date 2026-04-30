@@ -34,10 +34,14 @@ veclite/
 │   ├── types.ts
 │   ├── validator.ts
 │   ├── utils.ts
-│   └── adapters/
-│       ├── adapter.ts        ← StorageAdapter interface
-│       ├── indexeddb.ts      ← default browser adapter
-│       └── memory.ts         ← in-memory / testing
+│   ├── adapters/
+│   │   ├── adapter.ts        ← StorageAdapter interface
+│   │   ├── indexeddb.ts      ← default browser adapter
+│   │   └── memory.ts         ← in-memory / testing
+│   └── rag/                  ← v0.4 — veclite/rag sub-path entry
+│       ├── index.ts          ← public API
+│       ├── pipeline.ts       ← VecLiteRAG class
+│       └── chunker.ts        ← text chunking
 ├── tests/
 ├── bench/
 └── docs/
@@ -213,12 +217,12 @@ VecLiteStorageError     // storage adapter failure (any backend)
 - Serialise metadata to JSON string before crossing
 - Validate everything before it crosses — Rust should never receive malformed input
 
-## What's deliberately deferred to v0.4+
-- Filter operators beyond $gte, $lte, $in, $ne (e.g. $exists, $regex)
-- Node.js support
-- Web Worker support
-- Chunked persistence (currently: full JSON blob per save)
-- HNSW incremental delete (currently: full graph rebuild on delete/update)
+## What's deliberately deferred
+- Filter operators beyond $gte, $lte, $in, $ne (e.g. $exists, $regex) — no version assigned
+- Node.js support — v0.5
+- Web Worker support for core search — v0.5 (RAG embedding already off-thread via transformers.js worker in v0.4)
+- Chunked persistence — v0.5+, re-evaluated after RAG ships; current JSON blob is adequate at RAG scale (dim=384, ~10k chunks)
+- HNSW incremental delete — deprioritised; HNSW not recommended for high-dimensional use cases (see ADR-019)
 
 ## Current state
 - v0.3 complete and verified
@@ -234,7 +238,10 @@ VecLiteStorageError     // storage adapter failure (any backend)
 - CI configured (.github/workflows/ci.yml)
 
 ## What we're working on next
-- v0.4: Chunked persistence (binary format replacing single JSON blob)
+- v0.4: veclite/rag — batteries-included RAG pipeline as sub-path export
+  - Zero-config: chunking + embedding (transformers.js, MiniLM-L6) + VecLite search
+  - API: VecLiteRAG class, add/search/save/load, init with progress callback
+  - Single package, two entry points (see ADR-020)
 - Publish to npm
 
 ## Competitors
@@ -245,5 +252,5 @@ VecLiteStorageError     // storage adapter failure (any backend)
 
 ## Session notes
 [Update at start and end of every session]
-- Last session: v0.3 fully implemented — HNSW index (hnsw crate, M=16, Pcg64 RNG, post-filter), L2 and dot product metrics, 68 Rust tests, 100 TypeScript tests, ADR-014 through ADR-018 added
-- Next session: v0.4 planning (chunked persistence) or npm publish
+- Last session: benchmarked HNSW vs flat (flat wins at dim=1536 at all tested scales); pivoted v0.4 from chunked persistence to veclite/rag RAG pipeline; added ADR-019 (HNSW at high dimensions) and ADR-020 (sub-path export strategy); updated README, DECISIONS, ROADMAP, CLAUDE.md
+- Next session: implement v0.4 veclite/rag — package.json exports, tsup config, VecLiteRAG class

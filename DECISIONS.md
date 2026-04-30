@@ -382,21 +382,52 @@ Delete cost (1,000-vector base, dim=1536): flat is **11,600× faster** — HNSW 
 
 ---
 
+## ADR-020: veclite/rag as sub-path export, @xenova/transformers as optional peer
+
+**Decision:** Ship `veclite/rag` as a sub-path export of the `veclite` package, not a separate npm package. `@xenova/transformers` is declared as an optional peer dependency.
+
+**Package.json shape:**
+```json
+{
+  "exports": {
+    ".":     "./dist/index.js",
+    "./rag": "./dist/rag/index.js"
+  },
+  "peerDependencies": {
+    "@xenova/transformers": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@xenova/transformers": { "optional": true }
+  }
+}
+```
+
+**Rationale:**
+- Sub-path exports are the standard pattern for optional heavy features (e.g. `react/jsx-runtime`, `swr/infinite`)
+- Core users (`import 'veclite'`) never see transformers.js in their bundle
+- RAG users get everything from one package — one install, no separate veclite-rag package to version
+- Two packages (monorepo) adds publishing complexity without benefit at this scale
+
+**tsup:** Builds two entry points — `src/index.ts` (core) and `src/rag/index.ts` (RAG pipeline).
+
+**Status:** Planned for v0.4.
+
+---
+
 ## What's deferred — do not implement without explicit approval
 
-**Planned for v0.4 (storage):**
-- Chunked persistence — binary serialisation replacing the single JSON blob in save/load; versioned format with migration path from v0.1/v0.2/v0.3 JSON snapshot
-- Domain-aware storage API (evaluation) — decided after chunked persistence ships; may be unnecessary
-
-**Planned for v0.4 (storage):**
-- Chunked persistence — binary serialisation replacing the single JSON blob in save/load; versioned format with migration path from v0.1/v0.2 JSON snapshot
-- Domain-aware storage API (evaluation) — decided after chunked persistence ships; may be unnecessary
+**Planned for v0.4 (RAG pipeline):**
+- `veclite/rag` sub-path export — zero-config RAG with transformers.js (see ADR-020)
+- Default model: `Xenova/all-MiniLM-L6-v2` (dim=384, runs in browser)
+- API: `add(id, text, metadata?)`, `search(query, { topK })`, `init(onProgress)`
 
 **Planned for v0.5 (ecosystem):**
 - Node.js native support
 - Web Worker support
 - React Native support
 - Base64 inlined WASM option
+- Chunked persistence — re-evaluated after RAG ships; at RAG scale (dim=384, ~10k chunks) the current JSON blob is adequate
 
 **No version assigned:**
 - Filter operators beyond $gte, $lte, $in, $ne (e.g. $exists, $regex)
+- Domain-aware storage API — deprioritised; primary motivation (HNSW selective loading) no longer relevant

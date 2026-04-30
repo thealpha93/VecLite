@@ -32,19 +32,38 @@ The initial release focuses on correctness, stability, and proving the Rust/WASM
 HNSW and distance metrics are coupled: HNSW internally needs a distance function, so the metric abstraction gets designed here. Shipped the full algorithm story together.
 
 ### Core Algorithms & Indexing
-- [x] **HNSW Index (Approximate Nearest Neighbor):** Hierarchical Navigable Small World graphs for sub-linear search beyond 100k vectors. Opt-in via `indexType: 'hnsw'` alongside the flat index — existing users unaffected. Uses `hnsw` crate (rust-cv), M=16, M0=32, deterministic `Pcg64` RNG. Post-filter strategy with oversample=10.
+- [x] **HNSW Index (Approximate Nearest Neighbor):** Opt-in approximate nearest neighbour index via `indexType: 'hnsw'`. Uses `hnsw` crate (rust-cv), M=16, M0=32, deterministic `Pcg64` RNG. Post-filter strategy with oversample=10. Note: benchmarks show flat outperforms HNSW at typical embedding dimensions (dim ≥ 512) — see ADR-019.
 - [x] **Additional Distance Metrics:** L2 (Euclidean) distance and Dot Product alongside Cosine Similarity. `metric` specified at construction time; applies to both flat and HNSW index paths. Rust test count: 68. TypeScript test count: 100.
 
 ---
 
 ## Planned: v0.4.0
-*Focus: Storage — persistence at scale*
+*Focus: RAG pipeline — veclite/rag*
 
-Kept separate from v0.3 because the storage work is independent of the algorithm work, and the outcome of chunked persistence determines whether domain-aware storage is even necessary.
+A batteries-included RAG pipeline as a sub-path export of the same package. Bring a document, get semantic search. Chunking, embedding, and VecLite search under the hood. Zero config.
 
-### Storage
-- **Chunked Persistence:** Replacing the current single JSON blob in `save/load` with a binary format (packed f32 buffer + JSON metadata sidecar). Includes a versioned format and migration path from the v0.1/v0.2 JSON snapshot.
-- **Domain-Aware Storage API (Evaluation):** Re-evaluating the `StorageAdapter` interface to support selective index loading. Decided after chunked persistence ships — may be unnecessary if chunked persistence resolves memory pressure on its own.
+### veclite/rag
+- **Sub-path export:** `import { VecLiteRAG } from 'veclite/rag'` — separate entry point, no impact on core bundle. `@xenova/transformers` is an optional peer dependency, only required when using `/rag`.
+- **Zero-config RAG:** `new VecLiteRAG()` works out of the box. Uses `Xenova/all-MiniLM-L6-v2` (dim=384) by default — runs fully in the browser, no API keys, no data leaves the device.
+- **Document ingestion:** `rag.add(id, text, metadata?)` — handles chunking and embedding internally.
+- **Semantic search:** `rag.search(query, { topK })` — embeds the query and searches the underlying VecLite index.
+- **Model progress:** `rag.init(onProgress)` — explicit model load with progress callback for first-load UX.
+- **Non-blocking embedding:** transformers.js worker pipeline runs embedding off the main thread — no UI jank during `add()` or `search()`.
+- **Pluggable:** Custom model, chunk size, chunk overlap, and storage adapter all configurable.
+
+```typescript
+import { VecLiteRAG } from 'veclite/rag'
+
+const rag = new VecLiteRAG()
+await rag.init(({ loaded, total }) => console.log(`${loaded}/${total}`))
+
+await rag.add('doc1', 'The quick brown fox...', { source: 'notes' })
+const results = await rag.search('fast animals', { topK: 5 })
+// → [{ id: 'doc1', score: 0.94, chunk: '...', metadata: { source: 'notes' } }]
+
+await rag.save()
+await rag.load()
+```
 
 ---
 
@@ -52,9 +71,12 @@ Kept separate from v0.3 because the storage work is independent of the algorithm
 *Focus: Ecosystem — run VecLite everywhere*
 
 ### Runtimes
-- **Web Worker Support:** Clean API for running VecLite computations off the main thread to prevent UI blocking.
+- **Web Worker Support:** Clean API for running core VecLite search off the main thread. Note: RAG embedding already runs off-thread via transformers.js worker pipeline in v0.4 — this covers the core search path for large indices.
 - **Node.js Native Support:** Out-of-the-box support for server environments without requiring custom `fs` buffer loading.
 - **React Native Support:** Guaranteed compatibility with mobile React Native architectures.
+
+### Storage
+- **Chunked Persistence:** Revisited after RAG ships. At RAG scale (dim=384, ~10k chunks), the current JSON blob is adequate. Re-evaluated if users hit limits at larger scales.
 
 ### Distribution
 - **Base64 Inlined WASM:** Alternative distribution that bundles the WASM for zero-config deployments where bundle size is not the primary constraint.
@@ -66,7 +88,6 @@ Kept separate from v0.3 because the storage work is independent of the algorithm
 Features not on the immediate roadmap but under consideration:
 - Cloud syncing mechanisms
 - Built-in multi-tenant indices
-- Out-of-the-box local inference and embedding generation bindings
 
 ---
 
