@@ -182,6 +182,82 @@ class MyAdapter implements StorageAdapter {
 
 Community adapters for `localStorage`, React Native `AsyncStorage`, SQLite, etc. follow the same interface.
 
+## RAG pipeline (`veclite/rag`)
+
+A batteries-included RAG pipeline. Bring a document, get semantic search. Chunking, local embeddings via [transformers.js](https://huggingface.co/docs/transformers.js), and VecLite search under the hood — entirely in the browser.
+
+### Installation
+
+```bash
+npm install veclite @huggingface/transformers
+```
+
+`@huggingface/transformers` is an optional peer dependency — only required when using `veclite/rag`. The core `veclite` package is unaffected.
+
+### Usage
+
+```typescript
+import { VecLiteRAG } from 'veclite/rag'
+
+const rag = new VecLiteRAG()
+
+// Load WASM + download embedding model (cached by browser after first load)
+await rag.init(({ loaded, total, status }) => {
+  console.log(`${status}: ${loaded}/${total}`)
+})
+
+// Add documents — chunking and embedding handled internally
+await rag.add('doc1', 'The quick brown fox jumps over the lazy dog.', { source: 'notes' })
+await rag.add('doc2', 'Rust and WebAssembly make fast browser apps possible.')
+
+// Semantic search — query is embedded automatically
+const results = await rag.search('fast animals', { topK: 3 })
+// → [{ id: 'doc1', chunk: '...', score: 0.91, metadata: { source: 'notes' } }, ...]
+
+// Persist across sessions
+await rag.save()
+await rag.load()
+```
+
+### `new VecLiteRAG(config?)`
+
+```typescript
+const rag = new VecLiteRAG({
+  model: 'Xenova/all-MiniLM-L6-v2', // default — dim=384, runs fully in-browser
+  chunkSize: 1000,                   // chars per chunk (default: 1000)
+  chunkOverlap: 100,                 // overlap between chunks (default: 100)
+  storage: new MyAdapter(),          // default: IndexedDBAdapter
+})
+```
+
+### `rag.init(onProgress?)`
+
+Loads the WASM module and downloads the embedding model. Must be called before any other method. The model is cached by the browser after the first load — subsequent `init()` calls are fast.
+
+### `rag.add(id, text, metadata?)`
+
+Chunks `text`, embeds each chunk, and stores them in the underlying VecLite index. Re-adding an existing `id` replaces it (upsert semantics).
+
+### `rag.search(query, { topK? })`
+
+Embeds `query` and returns the top matching chunks. Results include the original document `id`, the matched `chunk` text, a similarity `score`, and user `metadata` (internal fields stripped).
+
+### `rag.delete(id)`
+
+Removes all chunks for the given document `id`.
+
+### `rag.save() / rag.load()`
+
+Persists and restores the full index (vectors + chunk map) through the configured storage adapter.
+
+### `rag.clear()`
+
+Wipes the in-memory index. Does not affect persisted state.
+
+### `rag.size`
+
+Total number of chunks currently indexed (not document count).
+
 ## Error types
 
 ```typescript

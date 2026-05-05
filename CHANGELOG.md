@@ -11,6 +11,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] — 2026-05-01
+
+### Added
+
+#### veclite/rag — batteries-included RAG pipeline
+- `VecLiteRAG` class — zero-config RAG pipeline exposed as a `veclite/rag` sub-path export
+- `rag.init(onProgress?)` — loads WASM and downloads embedding model; progress callback for first-load UX
+- `rag.add(id, text, metadata?)` — chunks, embeds, and indexes a document; upsert semantics on re-add
+- `rag.search(query, { topK? })` — embeds query and returns top matching chunks with `id`, `chunk`, `score`, `metadata`
+- `rag.delete(id)` — removes all chunks for a document
+- `rag.save()` / `rag.load()` — persists vectors and chunk map through the configured storage adapter
+- `rag.clear()` — wipes in-memory index
+- `rag.size` — total chunk count
+
+#### Chunker
+- Character-based text chunker with sentence-boundary detection (`. `, `!`, `?`, `\n`) and configurable overlap
+- Exported as `chunk(text, chunkSize?, overlap?)` from `veclite/rag` internals
+
+#### Build & packaging
+- Dual tsup entry points: `src/index.ts` (core) and `src/rag/index.ts` (RAG pipeline)
+- `./rag` sub-path in `package.json` exports — separate CJS, ESM, and `.d.ts` outputs
+- `@huggingface/transformers` v3 declared as optional peer dependency
+
+#### Tests
+- 21 new Vitest tests covering `VecLiteRAG` (init, add, search, delete, upsert, save/load, clear) and `chunk` unit tests
+- Total: 68 Rust tests, 121 TypeScript/Vitest tests
+
+---
+
+## [0.3.0] — 2026-04-30
+
+### Added
+
+#### HNSW index (opt-in)
+- `HnswIndex` Rust struct — HNSW approximate nearest neighbour index via `hnsw` crate (rust-cv 0.11), M=16, M0=32, deterministic `Pcg64` RNG
+- `indexType: 'hnsw'` config option on `VecLite` — opt-in alongside the flat index, existing users unaffected
+- `efConstruction` config option — HNSW build quality parameter (default: 200)
+- Post-filter strategy with oversample=10 for HNSW search with metadata filters
+- Delete on HNSW triggers full graph rebuild (incremental delete deferred)
+- **Note:** benchmarks show flat index outperforms HNSW at typical embedding dimensions (dim ≥ 512) — see ADR-019
+
+#### Distance metrics
+- `metric: 'l2'` — L2 (Euclidean) distance, score = `1 / (1 + distance)`
+- `metric: 'dot'` — dot product; HNSW graph uses cosine distance internally, dot product recomputed at score time
+- `metric` option applies to both flat and HNSW index paths
+- `Metric = 'cosine' | 'l2' | 'dot'` type exported from `veclite`
+
+#### TypeScript types
+- `IndexType = 'flat' | 'hnsw'` type exported from `veclite`
+- `VecLiteConfig` extended with `indexType`, `metric`, `efConstruction`
+
+#### Tests
+- 20 new Rust unit tests covering L2/dot similarity, HNSW insert/search/delete, and metric dispatch
+- 14 new TypeScript integration tests for HNSW and L2/dot metric paths
+- Total: 68 Rust tests, 100 TypeScript/Vitest tests
+
+#### Benchmarks
+- `bench/hnsw.bench.ts` — HNSW vs flat at 1k/5k/10k vectors, metric comparison, efConstruction tradeoff, upsert throughput, delete cost
+- `LARGE_SCALE=true` flag extends benchmark to 50k/100k vectors to find flat/HNSW crossover point
+
+---
+
 ## [0.2.0] — 2026-04-27
 
 ### Added
@@ -108,5 +170,8 @@ Initial release. 🎉
 
 ---
 
-[Unreleased]: https://github.com/thealpha93/VecLite/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/thealpha93/VecLite/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/thealpha93/VecLite/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/thealpha93/VecLite/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/thealpha93/VecLite/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thealpha93/VecLite/releases/tag/v0.1.0

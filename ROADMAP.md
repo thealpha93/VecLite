@@ -37,7 +37,7 @@ HNSW and distance metrics are coupled: HNSW internally needs a distance function
 
 ---
 
-## Planned: v0.4.0
+## Released: v0.4.0
 *Focus: RAG pipeline — veclite/rag*
 
 A batteries-included RAG pipeline as a sub-path export of the same package. Bring a document, get semantic search. Chunking, embedding, and VecLite search under the hood. Zero config.

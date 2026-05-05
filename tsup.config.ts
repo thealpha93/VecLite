@@ -2,7 +2,7 @@ import { copyFileSync } from 'fs'
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: ['src/index.ts', 'src/rag/index.ts'],
   format: ['cjs', 'esm'],
   dts: true,
   clean: true,

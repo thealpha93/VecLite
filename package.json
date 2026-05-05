@@ -1,6 +1,6 @@
 {
   "name": "veclite",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Client-side vector search. Rust/WASM powered, works where pure JS breaks down.",
   "author": "Aakash/thealpha93 <tmaakash143@gmail.com>",
   "license": "MIT",
@@ -20,7 +20,10 @@
     "vector-database",
     "rust",
     "browser",
-    "embeddings"
+    "embeddings",
+    "rag",
+    "pipeline",
+    "chunking"
   ],
   "type": "module",
   "main": "dist/index.cjs",
@@ -31,11 +34,24 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./rag": {
+      "types": "./dist/rag/index.d.ts",
+      "import": "./dist/rag/index.js",
+      "require": "./dist/rag/index.cjs"
     }
   },
   "files": [
     "dist"
   ],
+  "peerDependencies": {
+    "@huggingface/transformers": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    }
+  },
   "scripts": {
     "build:wasm": "wasm-pack build rust --target web --out-dir ../src/wasm --features simd",
     "build:ts": "tsup",
@@ -47,6 +63,9 @@
     "bench:search": "vitest bench --run bench/search.bench.ts"
   },
   "devDependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "client-vector-search": "^0.2.0",
+    "mememo": "^0.1.0",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"

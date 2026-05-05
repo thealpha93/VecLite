@@ -13,15 +13,25 @@
   </style>
 </head>
 <body>
-  <h1>VecLite browser smoke test (v0.3)</h1>
-  <p>Manual verification for the browser WASM init path (<code>VecLite.init()</code> with no arguments — uses <code>fetch</code> + <code>import.meta.url</code>). Covers all v0.3 features.</p>
+  <h1>VecLite browser smoke test (v0.4)</h1>
+  <p>Manual verification for the browser WASM init path (<code>VecLite.init()</code> with no arguments — uses <code>fetch</code> + <code>import.meta.url</code>). Covers all v0.4 features including <code>veclite/rag</code>.</p>
+  <p><strong>Section 9 (veclite/rag) requires an internet connection</strong> — the embedding model (~23 MB) is downloaded from HuggingFace on first run and cached by the browser.</p>
   <p><strong>To run:</strong> <code>npx serve . -p 3000</code> then open <a href="http://localhost:3000/docs/smoke-test.html">http://localhost:3000/docs/smoke-test.html</a></p>
   <hr>
   <div id="log"></div>
   <pre id="results">Running…</pre>
 
+  <script type="importmap">
+  {
+    "imports": {
+      "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/dist/transformers.min.js"
+    }
+  }
+  </script>
+
   <script type="module">
     import { VecLite, MemoryAdapter } from '/dist/index.js'
+    import { VecLiteRAG } from '/dist/rag/index.js'
 
     const log = document.getElementById('log')
     const out = document.getElementById('results')
@@ -179,10 +189,47 @@
           step(`metadata preserved → tag="${res[0].metadata.tag}"`, res[0].metadata.tag === 'persist')
         }
 
+        // ── 9. veclite/rag ────────────────────────────────────────────────────
+        section('9. veclite/rag (requires network — model downloads on first run)')
+        {
+          const rag = new VecLiteRAG({ storage: new MemoryAdapter() })
+          step('VecLiteRAG instantiated', true)
+
+          let lastStatus = ''
+          await rag.init(({ status }) => {
+            if (status !== lastStatus) {
+              step(`model: ${status}`, undefined)
+              lastStatus = status
+            }
+          })
+          step('rag.init() completed — WASM + model loaded', true)
+
+          await rag.add('doc1', 'The quick brown fox jumps over the lazy dog.', { source: 'smoke' })
+          await rag.add('doc2', 'Rust and WebAssembly make fast browser apps possible.')
+          step(`rag.add() × 2 → size=${rag.size}`, rag.size >= 2)
+
+          const results = await rag.search('fast animals', { topK: 1 })
+          step(`rag.search('fast animals') → id="${results[0]?.id}"`, results[0]?.id === 'doc1')
+          step(`metadata preserved → source="${results[0]?.metadata?.source}"`, results[0]?.metadata?.source === 'smoke')
+          step('internal _fields stripped from metadata', !('_docId' in (results[0]?.metadata ?? {})))
+
+          const adapter = new MemoryAdapter()
+          const rag2 = new VecLiteRAG({ storage: adapter })
+          await rag2.init()
+          await rag2.add('persist', 'Saved document.')
+          await rag2.save()
+          const rag3 = new VecLiteRAG({ storage: adapter })
+          await rag3.init()
+          await rag3.load()
+          step(`rag save/load round-trip → size=${rag3.size}`, rag3.size === 1)
+          const r = await rag3.search('document', { topK: 1 })
+          step(`search after load → id="${r[0]?.id}"`, r[0]?.id === 'persist')
+        }
+
         // ── Summary ───────────────────────────────────────────────────────────
         const allPassed = failCount === 0
         out.textContent = allPassed
-          ? '✓ All checks passed — WASM init path + all v0.3 features verified.'
+          ? '✓ All checks passed — WASM init path + all v0.4 features verified.'
           : `✗ ${failCount} check(s) failed — see log above.`
         out.style.color = allPassed ? 'green' : 'red'
 

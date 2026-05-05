@@ -38,8 +38,9 @@ veclite/
 │   │   ├── adapter.ts        ← StorageAdapter interface
 │   │   ├── indexeddb.ts      ← default browser adapter
 │   │   └── memory.ts         ← in-memory / testing
-│   └── rag/                  ← v0.4 — veclite/rag sub-path entry
+│   └── rag/                  ← veclite/rag sub-path entry
 │       ├── index.ts          ← public API
+│       ├── types.ts          ← VecLiteRAGConfig, RAGSearchResult, ProgressCallback
 │       ├── pipeline.ts       ← VecLiteRAG class
 │       └── chunker.ts        ← text chunking
 ├── tests/
@@ -225,12 +226,15 @@ VecLiteStorageError     // storage adapter failure (any backend)
 - HNSW incremental delete — deprioritised; HNSW not recommended for high-dimensional use cases (see ADR-019)
 
 ## Current state
-- v0.3 complete and verified
+- v0.4 complete and verified
 - Rust: 68 unit tests (similarity with L2/dot, flat index with metrics, HNSW index, filter operators)
-- TypeScript: 100 Vitest tests (integration + unit, including HNSW + metric tests)
+- TypeScript: 121 Vitest tests (100 core + 21 RAG including chunker unit tests)
+- veclite/rag: VecLiteRAG class, character-based chunker, @huggingface/transformers v3 peer dep
+- RAG storage: chunk map persisted to 'veclite:rag:v1' key, vector index to 'veclite:v1'
+- Build: dual tsup entry (src/index.ts + src/rag/index.ts), both CJS/ESM/DTS
+- package.json exports: "." and "./rag" sub-path, @huggingface/transformers optional peer dep
 - HNSW: hnsw crate (rust-cv 0.11), M=16 M0=32, Pcg64 RNG, post-filter oversample=10
 - Metrics: cosine (default), l2 (1/(1+distance) score), dot (recomputed from vectors)
-- Metric string at WASM boundary; Metric enum internal to Rust
 - SIMD: explicit f32x4 intrinsics in similarity.rs, simd Cargo feature, scalar fallback
 - Filter operators: $gte, $lte, $in, $ne; exact-match backwards compatible
 - Build toolchain working: wasm-pack --features simd + tsup, WASM copied to dist/
@@ -238,11 +242,8 @@ VecLiteStorageError     // storage adapter failure (any backend)
 - CI configured (.github/workflows/ci.yml)
 
 ## What we're working on next
-- v0.4: veclite/rag — batteries-included RAG pipeline as sub-path export
-  - Zero-config: chunking + embedding (transformers.js, MiniLM-L6) + VecLite search
-  - API: VecLiteRAG class, add/search/save/load, init with progress callback
-  - Single package, two entry points (see ADR-020)
-- Publish to npm
+- Publish to npm (v0.4.0)
+- v0.5: Web Worker support for core search path, Node.js native support
 
 ## Competitors
 - Vectra — Node.js only, pure JS, file-based
@@ -252,5 +253,5 @@ VecLiteStorageError     // storage adapter failure (any backend)
 
 ## Session notes
 [Update at start and end of every session]
-- Last session: benchmarked HNSW vs flat (flat wins at dim=1536 at all tested scales); pivoted v0.4 from chunked persistence to veclite/rag RAG pipeline; added ADR-019 (HNSW at high dimensions) and ADR-020 (sub-path export strategy); updated README, DECISIONS, ROADMAP, CLAUDE.md
-- Next session: implement v0.4 veclite/rag — package.json exports, tsup config, VecLiteRAG class
+- Last session: implemented v0.4 veclite/rag — VecLiteRAG class, chunker, types, 21 new tests (121 total), dual tsup entry, package.json exports + peerDeps, @huggingface/transformers v3
+- Next session: npm publish, or v0.5 planning
