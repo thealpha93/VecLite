@@ -2,8 +2,10 @@
 
 [![npm version](https://img.shields.io/npm/v/veclite.svg)](https://www.npmjs.com/package/veclite)
 [![CI](https://github.com/thealpha93/VecLite/actions/workflows/ci.yml/badge.svg)](https://github.com/thealpha93/VecLite/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)**Client-side vector search that scales.**
-Rust/WASM powered — works where pure JS breaks down.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink?logo=github)](https://github.com/sponsors/thealpha93)
+
+If you find VecLite useful, consider [sponsoring the project](https://github.com/sponsors/thealpha93) — it helps keep development going ❤️
 
 **Client-side vector search that scales.**
 
