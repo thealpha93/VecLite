@@ -77,6 +77,15 @@ db.delete(['doc1'])
 db.clear()
 ```
 
+## Built with VecLite
+
+- **[VectorMark](https://github.com/CesurPolat/VectorMark)** 
+  by [@CesurPolat](https://github.com/CesurPolat) - Smart 
+  bookmark manager with semantic search, available on Chrome 
+  Web Store and Firefox Add-ons.
+
+*Building something with VecLite? Open a PR to add it here.*
+
 ## API
 
 ### `VecLite.init(wasmInput?)`
