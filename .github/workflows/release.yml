@@ -1,3 +1,10 @@
+# Publishes via npm trusted publishing (OIDC) — no NPM_TOKEN required.
+# Configure once on npmjs.com → veclite → Settings → Trusted publishing:
+#   Provider: GitHub Actions
+#   Repository: thealpha93/VecLite
+#   Workflow filename: release.yml
+#   Allowed actions: npm publish
+# https://docs.npmjs.com/trusted-publishers
 name: Release
 
 on:
@@ -5,13 +12,14 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+  id-token: write # Required for OIDC trusted publishing
+
 jobs:
   build-and-publish:
     name: Build and publish to npm
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -32,9 +40,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
-          cache: npm
+          cache: false
+
+      - name: Upgrade npm (trusted publishing requires npm ≥ 11.5.1)
+        run: npm install -g npm@11.5.1
 
       - name: Install dependencies
         run: npm ci
@@ -46,9 +57,7 @@ jobs:
         run: npm test && npm run test:rust
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
