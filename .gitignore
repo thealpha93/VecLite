@@ -91,8 +91,6 @@ web_modules/
 .yarn-integrity
 
 # dotenv environment variable files
-.env
-.env.*
 !.env.example
 
 # parcel-bundler cache (https://parceljs.org/)
@@ -169,3 +167,4 @@ vite.config.ts.timestamp-*
 
 # wasm-pack output (build artifact — run `npm run build:wasm` to regenerate)
 src/wasm/
+config.bat
