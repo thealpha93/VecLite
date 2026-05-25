@@ -65,7 +65,9 @@
   "devDependencies": {
     "@huggingface/transformers": "^4.2.0",
     "client-vector-search": "^0.2.0",
+    "dotenv": "^8.2.0",
     "mememo": "^0.1.0",
+    "node-fetch": "^3.3.2",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
