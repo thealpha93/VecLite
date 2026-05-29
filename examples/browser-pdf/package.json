@@ -11,7 +11,7 @@
   "dependencies": {
     "veclite": "file:../..",
     "@xenova/transformers": "^2.16.0",
-    "pdfjs-dist": "3.11.174"
+    "pdfjs-dist": "4.2.67"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
